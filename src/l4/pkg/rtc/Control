@@ -1,0 +1,4 @@
+provides: rtc rtc_libc_be
+requires: stdlibs libio cxx_libc_io cxx_io libstdc++
+optional: drivers-frst
+Maintainer: maintainer@kernkonzept.com

@@ -1,0 +1,382 @@
+// vi:ft=cpp
+/* SPDX-License-Identifier: GPL-2.0-only or License-Ref-kk-custom */
+/*
+ * Copyright (C) 2015-2020, 2022 Kernkonzept GmbH.
+ * Author(s): Sarah Hoffmann <sarah.hoffmann@kernkonzept.com>
+ *            Manuel von Oltersdorff-Kalettka <manuel.kalettka@kernkonzept.com>
+ *
+ */
+#pragma once
+
+#include <l4/sys/factory>
+#include <l4/sys/semaphore>
+#include <l4/re/dataspace>
+#include <l4/re/env>
+#include <l4/re/util/unique_cap>
+#include <l4/re/util/object_registry>
+#include <l4/re/error_helper>
+
+#include <l4/util/atomic.h>
+#include <l4/util/bitops.h>
+#include <l4/l4virtio/client/l4virtio>
+#include <l4/l4virtio/l4virtio>
+#include <l4/l4virtio/virtqueue>
+#include <l4/l4virtio/virtio_block.h>
+#include <l4/sys/consts.h>
+
+#include <cstring>
+#include <vector>
+#include <functional>
+
+namespace L4virtio { namespace Driver {
+
+/**
+ * Simple class for accessing a virtio block device synchronously.
+ */
+class Block_device : public Device
+{
+public:
+  typedef std::function<void(unsigned char)> Callback;
+
+private:
+  enum { Header_size = sizeof(l4virtio_block_header_t) };
+
+  struct Request
+  {
+    l4_uint16_t tail;
+    Callback callback;
+
+    Request() : tail(Virtqueue::Eoq), callback(0) {}
+  };
+
+public:
+  /**
+   * Handle to an ongoing request.
+   */
+  class Handle
+  {
+    friend Block_device;
+    l4_uint16_t head;
+
+    explicit Handle(l4_uint16_t descno) : head(descno) {}
+
+  public:
+    Handle() : head(Virtqueue::Eoq) {}
+    bool valid() const { return head != Virtqueue::Eoq; }
+  };
+
+  /**
+   * Establish a connection to the device and set up shared memory.
+   *
+   * \param srvcap       IPC capability of the channel to the server.
+   * \param usermem      Size of additional memory to share with device.
+   * \param userdata     Pointer to the region of user-usable memory.
+   * \param user_devaddr Address of user-usable memory in device address space.
+   * \param qds          External queue dataspace. If this capability is invalid,
+   *                     the function will attempt to allocate a dataspace
+   *                     on its own. Note that the external queue dataspace
+   *                     must be large enough.
+   * \param fmask0       Feature bits 0..31 that the driver supports.
+   * \param fmask1       Feature bits 32..63 that the driver supports.
+   *
+   * This function starts a handshake with the device and sets up the
+   * virtqueues for communication and the additional data structures for
+   * the block device. It will also allocate and share additional memory
+   * that the caller then can use freely, i.e. normally this memory would
+   * be used as a reception buffer. The caller may also decide to not make use
+   * of this convenience function and request 0 bytes in usermem. Then it has
+   * to allocate the block buffers for sending/receiving payload manually and
+   * share them using register_ds().
+   */
+  void setup_device(L4::Cap<L4virtio::Device> srvcap, l4_size_t usermem,
+                    void **userdata, Ptr<void> &user_devaddr,
+                    L4::Cap<L4Re::Dataspace> qds = L4::Cap<L4Re::Dataspace>(),
+                    l4_uint32_t fmask0 = -1U, l4_uint32_t fmask1 = -1U)
+  {
+    // Contact device.
+    driver_connect(srvcap);
+
+    if (_config->device != L4VIRTIO_ID_BLOCK)
+      L4Re::chksys(-L4_ENODEV, "Device is not a block device.");
+
+    if (_config->num_queues != 1)
+      L4Re::chksys(-L4_EINVAL, "Invalid number of queues reported.");
+
+    // Memory is shared in one large dataspace which contains queues,
+    // space for header/status and additional user-defined memory.
+    unsigned queuesz = max_queue_size(0);
+    l4_size_t totalsz = l4_round_page(usermem);
+
+    l4_uint64_t const header_offset =
+      l4_round_size(_queue.total_size(queuesz),
+                    l4util_bsr(alignof(l4virtio_block_header_t)));
+    l4_uint64_t const status_offset = header_offset + queuesz * Header_size;
+    l4_uint64_t const usermem_offset = l4_round_page(status_offset + queuesz);
+
+    // reserve space for one header/status per descriptor
+    // TODO Should be reduced to 1/3 but this way no freelist is needed.
+    totalsz += usermem_offset;
+
+    auto *e = L4Re::Env::env();
+    if (!qds.is_valid())
+      {
+        _ds = L4Re::chkcap(L4Re::Util::make_unique_cap<L4Re::Dataspace>(),
+                           "Allocate queue dataspace capability");
+        L4Re::chksys(e->mem_alloc()->alloc(totalsz, _ds.get(),
+                                           L4Re::Mem_alloc::Continuous
+                                             | L4Re::Mem_alloc::Pinned),
+                     "Allocate memory for virtio structures");
+        _queue_ds = _ds.get();
+      }
+    else
+      {
+        if (qds->size() < totalsz)
+          L4Re::chksys(-L4_EINVAL, "External queue dataspace too small.");
+        _queue_ds = qds;
+      }
+
+    // Now sort out which region goes where in the dataspace.
+    L4Re::chksys(e->rm()->attach(&_queue_region, totalsz,
+                                 L4Re::Rm::F::Search_addr | L4Re::Rm::F::RW,
+                                 L4::Ipc::make_cap_rw(_queue_ds), 0,
+                                 L4_PAGESHIFT),
+                 "Attach dataspace for virtio structures");
+
+    l4_uint64_t devaddr;
+    L4Re::chksys(register_ds(_queue_ds, 0, totalsz, &devaddr),
+                 "Register queue dataspace with device");
+
+    _queue.init_queue(queuesz, _queue_region.get());
+
+    config_queue(0, queuesz, devaddr, devaddr + _queue.avail_offset(),
+                 devaddr + _queue.used_offset());
+
+    _header_addr = devaddr + header_offset;
+    _headers = reinterpret_cast<l4virtio_block_header_t *>(_queue_region.get()
+                                                           + header_offset);
+
+    _status_addr = devaddr + status_offset;
+    _status = _queue_region.get() + status_offset;
+
+    user_devaddr = Ptr<void>(devaddr + usermem_offset);
+    if (userdata)
+      *userdata = _queue_region.get() + usermem_offset;
+
+    // setup the callback mechanism
+    _pending.assign(queuesz, Request());
+
+    // Finish handshake with device.
+    _config->driver_features_map[0] = fmask0;
+    _config->driver_features_map[1] = fmask1;
+    driver_acknowledge();
+  }
+
+  /**
+   * Return a reference to the device configuration.
+   */
+  l4virtio_block_config_t const &device_config() const
+  {
+    return *_config->device_config<l4virtio_block_config_t>();
+  }
+
+  /**
+   * Start the setup of a new request.
+   *
+   * \param sector   First sector to write to/read from.
+   * \param type     Request type.
+   * \param callback Function to call, when the request is finished.
+   *                 May be 0 for synchronous requests.
+   */
+  Handle start_request(l4_uint64_t sector, l4_uint32_t type,
+                       Callback callback)
+  {
+    l4_uint16_t descno = _queue.alloc_descriptor();
+    if (descno == Virtqueue::Eoq)
+      return Handle(Virtqueue::Eoq);
+
+    L4virtio::Virtqueue::Desc &desc = _queue.desc(descno);
+    Request &req = _pending[descno];
+
+    // setup the header
+    l4virtio_block_header_t &head = _headers[descno];
+    head.type = type;
+    head.ioprio = 0;
+    head.sector = sector;
+
+    // and put it in the descriptor
+    desc.addr = Ptr<void>(_header_addr + descno * Header_size);
+    desc.len = Header_size;
+    desc.flags.raw = 0; // no write, no indirect
+
+    req.tail = descno;
+    req.callback = callback;
+
+    return Handle(descno);
+  }
+
+  /**
+   * Add a data block to a request that has already been set up.
+   *
+   * \param handle  Handle to request previously set up with start_request().
+   * \param addr    Address of data block in device address space.
+   * \param size    Size of data block.
+   *
+   * \retval L4_OK       Block was successfully added.
+   * \retval -L4_EAGAIN  No descriptors available. Try again later.
+   *
+   */
+  int add_block(Handle handle, Ptr<void> addr, l4_uint32_t size)
+  {
+    l4_uint16_t descno = _queue.alloc_descriptor();
+    if (descno == Virtqueue::Eoq)
+      return -L4_EAGAIN;
+
+    Request &req = _pending[handle.head];
+    L4virtio::Virtqueue::Desc &desc = _queue.desc(descno);
+    L4virtio::Virtqueue::Desc &prev = _queue.desc(req.tail);
+
+    prev.next = descno;
+    prev.flags.next() = true;
+
+    desc.addr = addr;
+    desc.len = size;
+    desc.flags.raw = 0;
+    if (_headers[handle.head].type > 0) // write or flush request
+      desc.flags.write() = true;
+
+    req.tail = descno;
+
+    return L4_EOK;
+  }
+
+  /**
+   * Process request asynchronously.
+   *
+   * \param handle  Handle to request to send to the device
+   *
+   * \retval L4_OK       Request was successfully scheduled.
+   * \retval -L4_EAGAIN  No descriptors available. Try again later.
+   *
+   * Sends a request to the driver that was previously set up
+   * with start_request() and add_block() and wait for it to be
+   * executed.
+   */
+  int send_request(Handle handle)
+  {
+    // add the status bit
+    auto descno = _queue.alloc_descriptor();
+    if (descno == Virtqueue::Eoq)
+      return -L4_EAGAIN;
+
+    Request &req = _pending[handle.head];
+    L4virtio::Virtqueue::Desc &desc = _queue.desc(descno);
+    L4virtio::Virtqueue::Desc &prev = _queue.desc(req.tail);
+
+    prev.next = descno;
+    prev.flags.next() = true;
+
+    desc.addr = Ptr<void>(_status_addr + descno);
+    desc.len = 1;
+    desc.flags.raw = 0;
+    desc.flags.write() = true;
+
+    req.tail = descno;
+
+    send(_queue, handle.head);
+
+    return L4_EOK;
+  }
+
+  /**
+   * Process request synchronously.
+   *
+   * \param handle  Handle to request to process.
+   *
+   * Sends a request to the driver that was previously set up
+   * with start_request() and add_block() and wait for it to be
+   * executed.
+   */
+  int process_request(Handle handle)
+  {
+    // add the status bit
+    auto descno = _queue.alloc_descriptor();
+    if (descno == Virtqueue::Eoq)
+      return descno;
+
+    L4virtio::Virtqueue::Desc &desc = _queue.desc(descno);
+    L4virtio::Virtqueue::Desc &prev = _queue.desc(_pending[handle.head].tail);
+
+    prev.next = descno;
+    prev.flags.next() = true;
+
+    desc.addr = Ptr<void>(_status_addr + descno);
+    desc.len = 1;
+    desc.flags.raw = 0;
+    desc.flags.write() = true;
+
+    _pending[handle.head].tail = descno;
+
+    int ret = send_and_wait(_queue, handle.head);
+    unsigned char status = _status[descno];
+    free_request(handle);
+
+    if (ret < 0)
+      return ret;
+
+    switch (status)
+      {
+      case L4VIRTIO_BLOCK_S_OK: return L4_EOK;
+      case L4VIRTIO_BLOCK_S_IOERR: return -L4_EIO;
+      case L4VIRTIO_BLOCK_S_UNSUPP: return -L4_ENOSYS;
+      }
+
+    return -L4_EINVAL;
+  }
+
+  void free_request(Handle handle)
+  {
+    if (handle.head != Virtqueue::Eoq
+        && _pending[handle.head].tail != Virtqueue::Eoq)
+      _queue.free_descriptor(handle.head, _pending[handle.head].tail);
+    _pending[handle.head].tail = Virtqueue::Eoq;
+  }
+
+  /**
+   * Process and free all items in the used queue.
+   *
+   * If the request has a callback registered it is called after the
+   * item has been removed from the queue.
+   */
+  void process_used_queue()
+  {
+    for (l4_uint16_t descno = _queue.find_next_used();
+         descno != Virtqueue::Eoq;
+         descno = _queue.find_next_used()
+         )
+      {
+        if (descno >= _queue.num() || _pending[descno].tail == Virtqueue::Eoq)
+          L4Re::chksys(-L4_ENOSYS, "Bad descriptor number");
+
+        unsigned char status = _status[descno];
+        free_request(Handle(descno));
+
+        if (_pending[descno].callback)
+          _pending[descno].callback(status);
+      }
+  }
+
+protected:
+  L4Re::Util::Unique_cap<L4Re::Dataspace> _ds;
+  L4::Cap<L4Re::Dataspace> _queue_ds;
+
+private:
+  L4Re::Rm::Unique_region<unsigned char *> _queue_region;
+  l4virtio_block_header_t *_headers;
+  unsigned char *_status;
+  l4_uint64_t _header_addr;
+  l4_uint64_t _status_addr;
+  Virtqueue _queue;
+  std::vector<Request> _pending;
+};
+
+} }

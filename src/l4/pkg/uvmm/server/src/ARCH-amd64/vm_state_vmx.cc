@@ -1,0 +1,382 @@
+/* SPDX-License-Identifier: GPL-2.0-only or License-Ref-kk-custom */
+/*
+ * Copyright (C) 2017-2018, 2020-2022 Kernkonzept GmbH.
+ * Author(s): Sarah Hoffmann <sarah.hoffmann@kernkonzept.com>
+ *            Philipp Eppelt <philipp.eppelt@kernkonzept.com>
+ */
+
+#include "vm_state_vmx.h"
+#include "consts.h"
+
+namespace Vmm {
+
+Vm_state::~Vm_state() = default;
+
+enum : unsigned long
+{
+  Misc_enable_fast_string = 1UL,
+
+  Cr0_pe_bit = 1UL,
+  Cr0_pg_bit = 1UL << 31,
+
+  Cr4_pae_bit = 1UL << 5,
+  Cr4_la57_bit = 1UL << 12,
+
+  Efer_syscall_enable_bit = 1UL,
+  Efer_lme_bit = 1UL << 8,
+  Efer_lma_bit = 1UL << 10,
+  Efer_nxe_bit = 1UL << 11,
+  // EFER.LMA writes are ignored. Other bits reserved.
+  Efer_write_mask = Efer_syscall_enable_bit | Efer_lme_bit | Efer_nxe_bit,
+
+  Entry_ctrl_ia32e_bit = 1UL << 9,
+};
+
+/**
+ * Handle exits due to HW/SW exceptions, NMIs, and external interrupts.
+ *
+ * Bit 11, error_valid, is not set if, an external interrupt occurred and
+ * 'acknowledge interrupt on exit' is not set in the exit controls.
+ */
+int
+Vmx_state::handle_exception_nmi_ext_int()
+{
+  Vm_exit_int_info interrupt_info = exit_int_info();
+
+  l4_uint32_t interrupt_error = 0;
+  if (interrupt_info.error_valid())
+    interrupt_error =
+      (l4_uint32_t)vmx_read(VMCS_VM_EXIT_INTERRUPT_ERROR);
+
+  info().printf("Interrupt exit: 0x%x/0x%x\n", interrupt_info.field,
+                (unsigned)interrupt_error);
+
+  switch ((interrupt_info.type()))
+    {
+    case 0x6:
+      warn().printf("Software exception %u\n",
+                    (unsigned)interrupt_info.vector());
+      break;
+    case 0x3:
+      return handle_hardware_exception(interrupt_info.vector());
+
+    case 0x2: warn().printf("NMI\n"); break;
+    case 0x0: warn().printf("External interrupt\n"); break;
+    default:
+      warn().printf("Unknown interrupt type: %u, vector: %u\n",
+                    interrupt_info.type().get(), interrupt_info.vector().get());
+      break;
+    }
+  return -L4_ENOSYS;
+}
+
+bool
+Vmx_state::read_msr(unsigned msr, l4_uint64_t *value) const
+{
+  unsigned shadow = msr_shadow_reg(msr);
+  if (shadow > 0)
+    {
+      *value = vmx_read(shadow);
+    }
+  else
+    {
+      switch (msr)
+        {
+        case 0x17: // IA32_PLATFORM_ID
+          *value = 0U;
+          break;
+        case 0x1a0: // IA32_MISC_ENABLE
+          *value = Misc_enable_fast_string;
+          break;
+        case 0x3a: // IA32_FEATURE_CONTROL
+          // Lock register so the guest does not try to enable anything.
+          *value = 1U;
+          break;
+        case 0xfe: // IA32_MTRRCAP
+        case 0x2ff: // IA32_MTRR_DEF_TYPE
+          *value = 0U;
+          break;
+        case 0x277: // IA32_PAT
+          *value = vmx_read(VMCS_GUEST_IA32_PAT);
+          break;
+        case 0xc0000080: // efer
+          *value = vmx_read(VMCS_GUEST_IA32_EFER);
+          break;
+
+        /*
+         * Non-architectural MSRs known to be probed by Linux that can be
+         * safely ignored:
+         *   0xce // MSR_PLATFORM_INFO
+         *   0x33 // TEST_CTRL
+         *   0x34 // MSR_SMI_COUNT
+         *  0x140 // MISC_FEATURE_ENABLES
+         *  0x64e // MSR_PPERF
+         *  0x639 // MSR_PP0_ENERGY_STATUS
+         *  0x611 // MSR_PKG_ENERGY_STATUS
+         *  0x619 // MSR_DRAM_ENERGY_STATUS
+         *  0x641 // MSR_PP1_ENERGY_STATUS
+         *  0x64d // MSR_PLATFORM_ENERGY_COUNTER
+         *  0x606 // MSR_RAPL_POWER_UNIT
+         */
+        default:
+          return false;
+        }
+    }
+
+  return true;
+}
+
+bool
+Vmx_state::write_msr(unsigned msr, l4_uint64_t value)
+{
+  unsigned shadow = msr_shadow_reg(msr);
+  if (shadow > 0)
+    {
+      vmx_write(shadow, value);
+      return true;
+    }
+
+  switch (msr)
+    {
+    case 0x277: // IA32_PAT
+      // sanitization of 7 PAT values
+      // 0xF8 are reserved bits
+      // 0x2 and 0x3 are reserved encodings
+      // usage of reserved bits and encodings results in a #GP
+      if (value & 0xF8F8F8F8F8F8F8F8ULL)
+        return false;
+      for (unsigned i = 0; i < 7; ++i)
+        if (((value & (0x7ULL << i*8)) >> i*8 == 0x2ULL)
+            || ((value & (0x7ULL << i*8)) >> i*8 == 0x3ULL))
+          return false;
+      vmx_write(VMCS_GUEST_IA32_PAT, value);
+      break;
+    case 0xc0000080: // efer
+      {
+        l4_uint64_t old_efer = vmx_read(VMCS_GUEST_IA32_EFER);
+        // LMA writes are ignored.
+        l4_uint64_t efer = (value & Efer_write_mask) | (old_efer & Efer_lma_bit);
+        l4_uint64_t cr0 = vmx_read(VMCS_GUEST_CR0);
+
+        trace().printf("IA32_EFER write: CR0: 0x%llx, old efer 0x%llx, "
+                      "new efer 0x%llx\n",
+                      cr0, old_efer, efer);
+
+        if (cr0 & Cr0_pg_bit)
+          {
+            // Can't change LME while CR0.PG is set. SDM vol 3. 4.1
+            if ((efer & Efer_lme_bit) != (old_efer & Efer_lme_bit))
+              {
+                // Inject GPF and do not write IA32_EFER
+                inject_hw_exception(13, Vmx_state::Push_error_code, 0);
+                break;
+              }
+          }
+
+        vmx_write(VMCS_GUEST_IA32_EFER, efer);
+        break;
+      }
+    case 0x8b: // IA32_BIOS_SIGN_ID
+    case 0x140:  // unknown in Intel 6th gen, but MISC_FEATURE register for xeon
+      break;
+    case 0x1a0:
+      warn().printf("Writing MSR 0x%x IA32_MISC_ENABLED 0x%llx\n", msr, value);
+      break;
+    case 0xe01: // MSR_UNC_PERF_GLOBAL_CTRL
+      // can all be savely ignored
+      break;
+
+    default:
+      return false;
+    }
+
+  return true;
+}
+
+int
+Vmx_state::handle_cr_access(l4_vcpu_regs_t *regs)
+{
+  auto qual = vmx_read(VMCS_EXIT_QUALIFICATION);
+  int crnum;
+  l4_umword_t newval;
+  long retval = Jump_instr;
+
+  switch ((qual >> 4) & 3)
+    {
+    case 0: // mov to cr
+      crnum = qual & 0xF;
+      switch ((qual >> 8) & 0xF)
+        {
+        case 0: newval = regs->ax; break;
+        case 1: newval = regs->cx; break;
+        case 2: newval = regs->dx; break;
+        case 3: newval = regs->bx; break;
+        case 4: newval = vmx_read(VMCS_GUEST_RSP); break;
+        case 5: newval = regs->bp; break;
+        case 6: newval = regs->si; break;
+        case 7: newval = regs->di; break;
+        case 8: newval = regs->r8; break;
+        case 9: newval = regs->r9; break;
+        case 10: newval = regs->r10; break;
+        case 11: newval = regs->r11; break;
+        case 12: newval = regs->r12; break;
+        case 13: newval = regs->r13; break;
+        case 14: newval = regs->r14; break;
+        case 15: newval = regs->r15; break;
+        default:
+          warn().printf("Loading CR from unknown register\n");
+          return -L4_EINVAL;
+        }
+      break;
+    case 2: // clts
+      crnum = 0;
+      newval = vmx_read(VMCS_GUEST_CR0) & ~(1ULL << 3);
+      break;
+    default:
+      warn().printf("Unknown CR action %lld.\n", (qual >> 4) & 3);
+      return -L4_EINVAL;
+    }
+
+  switch (crnum)
+    {
+    case 0:
+      {
+        auto old_cr0 = vmx_read(VMCS_GUEST_CR0);
+        trace().printf("Write to cr0: 0x%llx -> 0x%lx\n", old_cr0, newval);
+
+        l4_uint64_t cr4 = vmx_read(VMCS_GUEST_CR4);
+        l4_uint64_t efer = vmx_read(VMCS_GUEST_IA32_EFER);
+
+        // enable paging
+        if ((newval & Cr0_pg_bit) && !(old_cr0 & Cr0_pg_bit))
+          {
+            if (   (!(cr4 & Cr4_pae_bit) && (efer & Efer_lme_bit))
+                || (!(efer & Efer_lme_bit) && (cr4 & Cr4_la57_bit)))
+              {
+                // inject GPF and do not write CR0
+                inject_hw_exception(13, Vmx_state::Push_error_code, 0);
+                retval = L4_EOK;
+                break;
+              }
+
+            // LA57:   Cr4.PAE,  EFER.LME,  Cr4.LA57
+            // IA32e:  Cr4.PAE,  EFER.LME, !Cr4.LA57
+            // PAE:    Cr4.PAE, !EFER.LME, !Cr4.LA57
+            // 32bit: !Cr4.PAE, !EFER.LME, !Cr4.LA57
+            if ((cr4 & Cr4_pae_bit) && (efer & Efer_lme_bit))
+              {
+                if (cr4 & Cr4_la57_bit)
+                  info().printf("Enable LA57 paging\n");
+                else
+                  info().printf("Enable IA32e paging\n");
+
+                vmx_write(VMCS_VM_ENTRY_CTLS,
+                          vmx_read(VMCS_VM_ENTRY_CTLS) | Entry_ctrl_ia32e_bit);
+                // Contrary to SDM Vol 3, 24.8.1. IA32_EFER.LMA is not set to
+                // the value of ENTRY_CTLS.IA32e on VMentry.
+                vmx_write(VMCS_GUEST_IA32_EFER, efer | Efer_lma_bit);
+              }
+            else if (cr4 & Cr4_pae_bit) // && !EFER.LME
+                trace().printf("Enable PAE paging.\n");
+            else
+                trace().printf("Enable 32-bit paging\n");
+          }
+
+        // disable paging
+        if (!(newval & Cr0_pg_bit) && (old_cr0 & Cr0_pg_bit))
+          {
+            trace().printf("Disabling paging ...\n");
+
+            vmx_write(VMCS_VM_ENTRY_CTLS,
+                      vmx_read(VMCS_VM_ENTRY_CTLS) & ~Entry_ctrl_ia32e_bit);
+            // Contrary to SDM Vol 3, 24.8.1. IA32_EFER.LMA is not set to
+            // the value of ENTRY_CTLS.IA32e on VMentry.
+            vmx_write(VMCS_GUEST_IA32_EFER, efer & ~Efer_lma_bit);
+          }
+
+        // 0x10 => Extension Type; hardcoded to 1 see manual
+        vmx_write(VMCS_GUEST_CR0, newval | 0x10);
+        vmx_write(VMCS_CR0_READ_SHADOW, newval);
+        break;
+      }
+    case 4:
+      {
+        trace().printf("mov to cr4: 0x%lx, RIP 0x%lx\n", newval, ip());
+        l4_uint64_t old_cr4 = vmx_read(VMCS_GUEST_CR4);
+
+        if (vmx_read(VMCS_GUEST_CR0) & Cr0_pg_bit)
+          {
+            if ((newval & Cr4_la57_bit) != (old_cr4 & Cr4_la57_bit))
+              {
+                // inject GPF and do not write CR4
+                inject_hw_exception(13, Vmx_state::Push_error_code, 0);
+                retval = L4_EOK;
+                break;
+              }
+
+            l4_uint64_t efer = vmx_read(VMCS_GUEST_IA32_EFER);
+            if (!(newval & Cr4_pae_bit) && (efer & Efer_lme_bit))
+              {
+                // inject GPF and do not write CR4
+                inject_hw_exception(13, Vmx_state::Push_error_code, 0);
+                retval = L4_EOK;
+                break;
+              }
+            // !EFER.LME means either PAE or 32-bit paging. Transitioning
+            // between these two while Cr0.PG is set is allowed.
+          }
+
+        // We don't support 5-level page tables, be quirky and don't allow
+        // setting this bit. (Or fix page-table walker.)
+        if (newval & Cr4_la57_bit)
+          {
+            info().printf("Cr4 Guest wants to enable LA57. Filtering...\n");
+            newval &= ~Cr4_la57_bit;
+          }
+
+        // CR4 0x2000  = VMXEnable bit
+        // force VMXEnable bit, but hide it from guest
+        vmx_write(VMCS_GUEST_CR4, newval | 0x2000);
+        vmx_write(VMCS_CR4_READ_SHADOW, newval);
+        break;
+      }
+
+    default:
+      warn().printf("Unknown CR access.\n");
+      retval = -L4_EINVAL;
+    }
+  return retval;
+}
+
+int
+Vmx_state::handle_hardware_exception(unsigned num)
+{
+  Err err;
+  err.printf("Hardware exception\n");
+
+  switch (num)
+  {
+    case 0: err.printf("Divide error\n"); break;
+    case 1: err.printf("Debug\n"); break;
+    case 3: err.printf("Breakpoint\n"); break;
+    case 4: err.printf("Overflow\n"); break;
+    case 5: err.printf("Bound range\n"); break;
+    case 6: err.printf("Invalid opcode\n"); break;
+    case 7: err.printf("Device not available\n"); break;
+    case 8: err.printf("Double fault\n"); break;
+    case 9: err.printf("Coprocessor segment overrun\n"); break;
+    case 10: err.printf("Invalid TSS\n"); break;
+    case 11: err.printf("Segment not present\n"); break;
+    case 12: err.printf("Stack-segment fault\n"); break;
+    case 13: err.printf("General protection\n"); break;
+    case 14: err.printf("Page fault\n"); break;
+    case 16: err.printf("FPU error\n"); break;
+    case 17: err.printf("Alignment check\n"); break;
+    case 18: err.printf("Machine check\n"); break;
+    case 19: err.printf("SIMD error\n"); break;
+    default: err.printf("Unknown exception\n"); break;
+  }
+  return -L4_EINVAL;
+}
+
+} //namespace Vmm
