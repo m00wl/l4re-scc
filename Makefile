@@ -1,6 +1,3 @@
-
-SHELL = /bin/bash
-
 all: 
 	@if [ -d obj ]; then                                           \
 	  $(MAKE) build_all;                                           \
