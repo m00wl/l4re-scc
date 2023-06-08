@@ -21,6 +21,9 @@
       in {
         devShells.default = pkgsArm64.mkShell {
           CROSS_COMPILE = "aarch64-unknown-linux-gnu-";
+          buildInputs = [
+            pkgs.ncurses
+          ];
           packages = [
             # build
             pkgs.gcc
