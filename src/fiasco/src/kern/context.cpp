@@ -95,7 +95,7 @@ public:
   }
 };
 
-/** An execution context.  A context is a runnable, schedulable activity.
+/** An execution context.
     It carries along some state used by other subsystems: A lock count,
     and stack-element forward/next pointers.
  */
@@ -454,31 +454,7 @@ Context_ptr::ptr(Space *s, L4_fpage::Rights *rights) const
   return static_cast<Obj_space*>(s)->lookup_local(_t, rights);
 }
 
-
-
 #include <cstdio>
-
-/**
- * Initialize a context.
- *
- * After setup, a switch_exec_locked to this context results in a return to user
- * code using the return registers at regs(). The return registers are not
- * initialized however; neither is the Space to be used in thread switching.
- *
- * \pre (_kernel_sp == 0)  &&  (* (stack end) == 0)
- */
-PUBLIC inline NEEDS ["atomic.h", "entry_frame.h", <cstdio>]
-Context::Context()
-: _kernel_sp(reinterpret_cast<Mword*>(regs())),
-  // TCBs are zero initialized. Thus, members not explictly initialized can be
-  // assumed to be zero-initialized, unless their default constructor does
-  // something different.
-  _helper(this),
-  _sched_context(),
-  _sched(&_sched_context)
-{
-  _home_cpu = Cpu::invalid();
-}
 
 PUBLIC inline
 void
@@ -1527,6 +1503,56 @@ Context::copy_and_sanitize_trap_state(Trap_state *dst,
 
 PUBLIC inline
 bool Context::migration_pending() const { return _migration; }
+
+// --------------------------------------------------------------------------
+IMPLEMENTATION [!sched_fcc]:
+
+/**
+ * Initialize a context.
+ *
+ * After setup, a switch_exec_locked to this context results in a return to user
+ * code using the return registers at regs(). The return registers are not
+ * initialized however; neither is the Space to be used in thread switching.
+ *
+ * \pre (_kernel_sp == 0)  &&  (* (stack end) == 0)
+ */
+PUBLIC inline NEEDS ["atomic.h", "entry_frame.h", <cstdio>]
+Context::Context()
+: _kernel_sp(reinterpret_cast<Mword*>(regs())),
+  // TCBs are zero initialized. Thus, members not explictly initialized can be
+  // assumed to be zero-initialized, unless their default constructor does
+  // something different.
+  _helper(this),
+  _sched_context(),
+  _sched(&_sched_context)
+{
+  _home_cpu = Cpu::invalid();
+}
+
+// --------------------------------------------------------------------------
+IMPLEMENTATION [sched_fcc]:
+
+/**
+ * Initialize a context.
+ *
+ * After setup, a switch_exec_locked to this context results in a return to user
+ * code using the return registers at regs(). The return registers are not
+ * initialized however; neither is the Space to be used in thread switching.
+ *
+ * \pre (_kernel_sp == 0)  &&  (* (stack end) == 0)
+ */
+PUBLIC inline NEEDS ["atomic.h", "entry_frame.h", <cstdio>]
+Context::Context()
+: _kernel_sp(reinterpret_cast<Mword*>(regs())),
+  // TCBs are zero initialized. Thus, members not explictly initialized can be
+  // assumed to be zero-initialized, unless their default constructor does
+  // something different.
+  _helper(this),
+  _sched_context(this),
+  _sched(&_sched_context)
+{
+  _home_cpu = Cpu::invalid();
+}
 
 //----------------------------------------------------------------------------
 IMPLEMENTATION [!mp]:

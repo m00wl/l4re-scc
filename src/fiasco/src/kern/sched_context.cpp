@@ -53,6 +53,8 @@ public:
   static Per_cpu<Ready_queue> rq;
 };
 
+//------------------------------------------------------------------------------
+
 IMPLEMENTATION:
 
 #include <cassert>

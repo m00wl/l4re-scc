@@ -246,7 +246,7 @@ Jdb_thread_list::sc_wfq_iter_next(Sched_context *t)
 
 
 // --------------------------------------------------------------------------
-IMPLEMENTATION [sched_fixed_prio || sched_fp_wfq]:
+IMPLEMENTATION [sched_fixed_prio || sched_fp_wfq || sched_fcc]:
 
 template<typename T> struct Jdb_thread_list_policy;
 
@@ -291,7 +291,7 @@ Jdb_thread_list::sc_fp_iter_next(Sched_context *t)
 }
 
 // --------------------------------------------------------------------------
-IMPLEMENTATION [sched_fixed_prio]:
+IMPLEMENTATION [sched_fixed_prio || sched_fcc]:
 
 template<>
 struct Jdb_thread_list_policy<Ready_queue_fp<Sched_context> >

@@ -1,4 +1,4 @@
-INTERFACE [sched_fixed_prio || sched_fp_wfq]:
+INTERFACE [sched_fixed_prio || sched_fp_wfq || sched_fcc]:
 
 #include "config.h"
 #include <cxx/dlist>
@@ -39,7 +39,7 @@ public:
 
 
 // ---------------------------------------------------------------------------
-IMPLEMENTATION [sched_fixed_prio || sched_fp_wfq]:
+IMPLEMENTATION [sched_fixed_prio || sched_fp_wfq || sched_fcc]:
 
 #include <cassert>
 #include "cpu_lock.h"

@@ -215,7 +215,7 @@ pic_IMPL		:= pic
 platform_control_IMPL   += platform_control-arm-psci
 psci_IMPL		:= psci-arm
 sched_context_IMPL	:= sched_context-wfq sched_context-fixed_prio \
-			   sched_context-fp_wfq sched_context
+			   sched_context-fp_wfq sched_context-fcc sched_context
 scu_IMPL                := scu
 spin_lock_IMPL		:= spin_lock spin_lock-arm spin_lock-arm-$(BITS)
 startup_IMPL		:= startup startup-arm

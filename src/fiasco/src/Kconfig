@@ -279,6 +279,12 @@ config SCHED_FIXED_PRIO
 	  Choose this for the standard fixed priority scheduler with
 	  256 priority levels.
 
+config SCHED_FCC
+  bool "Scheduling contexts as first-class citizens"
+  help
+    Choose this scheduler to promote Scheduling contexts to
+    first-class citizens.
+
 config SCHED_WFQ
 	bool "Weighted fair queueing scheduler"
 	depends on EXPERIMENTAL
