@@ -406,30 +406,31 @@ public:
      */
     Label_allow_syscall = 1,
 
-    Label_irq = -1L,           ///< IRQ object protocol.
-    Label_page_fault = -2L,    ///< Page fault messages use this protocol.
-    Label_preemption = -3L,    ///< Preemption IPC protocol. \note unused.
-    Label_sys_exception = -4L, ///< Sys exception protocol. \note unused.
-    Label_exception  = -5L,    ///< Exception IPC protocol.
-    Label_sigma0 = -6L,        ///< Protocol for sigma0 objects.
-    Label_io_page_fault = -8L, ///< Protocol for I/O-port page faults.
-    Label_kobject = -10L,      ///< Control protocol iD for IPC gates (server
-                               ///  side).
-    Label_task = -11L,         ///< Protocol ID for task and VM objects.
-    Label_thread = -12L,       ///< Protocol ID for thread objects.
-    Label_log = -13L,          ///< Protocol ID for log / vcon objects.
-    Label_scheduler = -14L,    ///< Protocol ID for scheduler objects.
-    Label_factory = -15L,      ///< Protocol ID for factory objects.
-    Label_vm = -16L,           ///< Factory ID for VM objects (used for create
-                               ///  operations on a factory).
-    Label_dma_space = -17L,    ///< Factory ID for an DMA address space
-    Label_irq_sender = -18L,   ///< Protocol for IRQ sender objects.
-    Label_irq_mux = -19L,      ///< Protocol for IRQ multiplexer objects.
-    Label_semaphore = -20L,    ///< Protocol ID for semaphore objects.
-    Label_iommu = -22L,        ///< Protocol ID for IOMMUs
-    Label_debugger = -23L,     ///< Protocol ID for the debugger
-    Label_smc = -24L,          ///< Protocol ID for ARM SMC calls.
-    Max_factory_label = Label_iommu,
+    Label_irq = -1L,            ///< IRQ object protocol.
+    Label_page_fault = -2L,     ///< Page fault messages use this protocol.
+    Label_preemption = -3L,     ///< Preemption IPC protocol. \note unused.
+    Label_sys_exception = -4L,  ///< Sys exception protocol. \note unused.
+    Label_exception  = -5L,     ///< Exception IPC protocol.
+    Label_sigma0 = -6L,         ///< Protocol for sigma0 objects.
+    Label_io_page_fault = -8L,  ///< Protocol for I/O-port page faults.
+    Label_kobject = -10L,       ///< Control protocol iD for IPC gates (server
+                                ///  side).
+    Label_task = -11L,          ///< Protocol ID for task and VM objects.
+    Label_thread = -12L,        ///< Protocol ID for thread objects.
+    Label_log = -13L,           ///< Protocol ID for log / vcon objects.
+    Label_scheduler = -14L,     ///< Protocol ID for scheduler objects.
+    Label_factory = -15L,       ///< Protocol ID for factory objects.
+    Label_vm = -16L,            ///< Factory ID for VM objects (used for create
+                                ///  operations on a factory).
+    Label_dma_space = -17L,     ///< Factory ID for an DMA address space
+    Label_irq_sender = -18L,    ///< Protocol for IRQ sender objects.
+    Label_irq_mux = -19L,       ///< Protocol for IRQ multiplexer objects.
+    Label_semaphore = -20L,     ///< Protocol ID for semaphore objects.
+    Label_iommu = -22L,         ///< Protocol ID for IOMMUs
+    Label_debugger = -23L,      ///< Protocol ID for the debugger
+    Label_smc = -24L,           ///< Protocol ID for ARM SMC calls.
+    Label_sched_context = -25L, ///< Protocol ID for ARM SMC calls.
+    Max_factory_label = Label_sched_context,
   };
 private:
   Mword _tag;

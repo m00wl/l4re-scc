@@ -121,29 +121,31 @@ PRIVATE inline NOEXPORT ALWAYS_INLINE
 bool
 Semaphore::down(Thread *ct)
 {
-  bool run = true;
-    {
-      auto g = lock_guard(_waiting.lock());
-      if (_queued == 0)
-        {
-          run = false;
-          // set fake partner to avoid IPCs to the thread
-          // TODO: make really sure that the partner pointer never gets
-          //       dereferenced (use C++ types)
-          ct->set_partner(sem_partner());
-          ct->state_change_dirty(~Thread_ready, Thread_receive_wait);
-          ct->set_wait_queue(&_waiting);
-          ct->sender_enqueue(&_waiting, ct->sched()->prio());
-        }
-      else
-        --_queued;
-    }
+  (void)ct;
+  panic("Semaphore::down: sc not available here\n");
+  //bool run = true;
+  //  {
+  //    auto g = lock_guard(_waiting.lock());
+  //    if (_queued == 0)
+  //      {
+  //        run = false;
+  //        // set fake partner to avoid IPCs to the thread
+  //        // TODO: make really sure that the partner pointer never gets
+  //        //       dereferenced (use C++ types)
+  //        ct->set_partner(sem_partner());
+  //        ct->state_change_dirty(~Thread_ready, Thread_receive_wait);
+  //        ct->set_wait_queue(&_waiting);
+  //        ct->sender_enqueue(&_waiting, ct->sched()->prio());
+  //      }
+  //    else
+  //      --_queued;
+  //  }
 
-   // auto unmask edge triggered IRQs if there is just one pending IRQ left
-   if (access_once(&_queued) == 1 && hit_func == &hit_edge_irq)
-     unmask();
+  // // auto unmask edge triggered IRQs if there is just one pending IRQ left
+  // if (access_once(&_queued) == 1 && hit_func == &hit_edge_irq)
+  //   unmask();
 
-   return run;
+  // return run;
 }
 
 PRIVATE inline NEEDS["assert_opt.h"] NOEXPORT ALWAYS_INLINE

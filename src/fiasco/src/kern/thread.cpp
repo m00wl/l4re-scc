@@ -402,20 +402,21 @@ PUBLIC inline NEEDS ["config.h", "timeout.h"]
 void
 Thread::handle_timer_interrupt()
 {
-  Cpu_number _cpu = current_cpu();
-  // XXX: This assumes periodic timers (i.e. bogus in one-shot mode)
-  if (!Config::Fine_grained_cputime)
-    consume_time(Config::Scheduler_granularity);
+  panic("sc not accessible here\n");
+  //Cpu_number _cpu = current_cpu();
+  //// XXX: This assumes periodic timers (i.e. bogus in one-shot mode)
+  //if (!Config::Fine_grained_cputime)
+  //  consume_time(Config::Scheduler_granularity);
 
-  bool resched = Rcu::do_pending_work(_cpu);
+  //bool resched = Rcu::do_pending_work(_cpu);
 
-  // Check if we need to reschedule due to timeouts or wakeups
-  if ((Timeout_q::timeout_queue.cpu(_cpu).do_timeouts() || resched)
-      && !Sched_context::rq.current().schedule_in_progress)
-    {
-      schedule();
-      assert (timeslice_timeout.cpu(current_cpu())->is_set());	// Coma check
-    }
+  //// Check if we need to reschedule due to timeouts or wakeups
+  //if ((Timeout_q::timeout_queue.cpu(_cpu).do_timeouts() || resched)
+  //    && !Sched_context::rq.current().schedule_in_progress)
+  //  {
+  //    schedule();
+  //    assert (timeslice_timeout.cpu(current_cpu())->is_set());	// Coma check
+  //  }
 }
 
 
@@ -477,96 +478,97 @@ PRIVATE
 bool
 Thread::do_kill()
 {
-  //
-  // Kill this thread
-  //
+  panic("Thread::do_kill: sc not available here\n");
+  ////
+  //// Kill this thread
+  ////
 
-  // But first prevent it from being woken up by asynchronous events
+  //// But first prevent it from being woken up by asynchronous events
 
-  {
-    auto guard = lock_guard(cpu_lock);
+  //{
+  //  auto guard = lock_guard(cpu_lock);
 
-    // if IPC timeout active, reset it
-    if (_timeout)
-      _timeout->reset();
+  //  // if IPC timeout active, reset it
+  //  if (_timeout)
+  //    _timeout->reset();
 
-    Sched_context::Ready_queue &rq = Sched_context::rq.current();
+  //  Sched_context::Ready_queue &rq = Sched_context::rq.current();
 
-    // Switch to time-sharing scheduling context
-    if (sched() != sched_context())
-      switch_sched(sched_context(), &rq);
+  //  // Switch to time-sharing scheduling context
+  //  if (sched() != sched_context())
+  //    switch_sched(sched_context(), &rq);
 
-    if (!rq.current_sched() || rq.current_sched()->context() == this)
-      rq.set_current_sched(current()->sched());
-  }
+  //  if (!rq.current_sched() || rq.current_sched()->context() == this)
+  //    rq.set_current_sched(current()->sched());
+  //}
 
-  // if other threads want to send me IPC messages, abort these
-  // operations
-  {
-    auto guard = lock_guard(cpu_lock);
-    while (Sender *s = Sender::cast(sender_list()->first()))
-      {
-        s->sender_dequeue(sender_list());
-        s->ipc_receiver_aborted();
-        Proc::preemption_point();
-      }
-  }
+  //// if other threads want to send me IPC messages, abort these
+  //// operations
+  //{
+  //  auto guard = lock_guard(cpu_lock);
+  //  while (Sender *s = Sender::cast(sender_list()->first()))
+  //    {
+  //      s->sender_dequeue(sender_list());
+  //      s->ipc_receiver_aborted();
+  //      Proc::preemption_point();
+  //    }
+  //}
 
-  // if engaged in IPC operation, stop it
-  if (in_sender_list())
-    {
-      while (Locked_prio_list *q = wait_queue())
-        {
-          auto g = lock_guard(q->lock());
-          if (wait_queue() == q)
-            {
-              sender_dequeue(q);
-              set_wait_queue(0);
-              break;
-            }
-        }
-    }
+  //// if engaged in IPC operation, stop it
+  //if (in_sender_list())
+  //  {
+  //    while (Locked_prio_list *q = wait_queue())
+  //      {
+  //        auto g = lock_guard(q->lock());
+  //        if (wait_queue() == q)
+  //          {
+  //            sender_dequeue(q);
+  //            set_wait_queue(0);
+  //            break;
+  //          }
+  //      }
+  //  }
 
-  if (utcb().kern())
-    utcb().access()->free_marker = Utcb::Free_marker;
-  // No UTCB access beyond this point!
+  //if (utcb().kern())
+  //  utcb().access()->free_marker = Utcb::Free_marker;
+  //// No UTCB access beyond this point!
 
-  release_fpu_if_owner();
+  //release_fpu_if_owner();
 
-  vcpu_enter_kernel_mode(vcpu_state().access());
-  vcpu_update_state();
+  //vcpu_enter_kernel_mode(vcpu_state().access());
+  //vcpu_update_state();
 
-  unbind();
-  vcpu_set_user_space(0);
+  //unbind();
+  //vcpu_set_user_space(0);
 
-  cpu_lock.lock();
+  //cpu_lock.lock();
 
-  arch_vcpu_ext_shutdown();
+  //arch_vcpu_ext_shutdown();
 
-  state_change_dirty(~Thread_dying, Thread_dead);
+  //state_change_dirty(~Thread_dying, Thread_dead);
 
-  // dequeue from system queues
-  Sched_context::rq.current().ready_dequeue(sched());
+  //// dequeue from system queues
+  //Sched_context::rq.current().ready_dequeue(sched());
 
-  if (_del_observer)
-    {
-      _del_observer->unbind();
-      _del_observer = 0;
-    }
+  //if (_del_observer)
+  //  {
+  //    _del_observer->unbind();
+  //    _del_observer = 0;
+  //  }
 
-  rcu_wait();
+  //rcu_wait();
 
-  state_del_dirty(Thread_ready_mask);
+  //state_del_dirty(Thread_ready_mask);
 
-  Sched_context::rq.current().ready_dequeue(sched());
+  //Sched_context::rq.current().ready_dequeue(sched());
 
-  // make sure this thread really never runs again by migrating it
-  // to the 'invalid' CPU forcefully and then switching to the kernel
-  // thread for doing the last bits.
-  force_to_invalid_cpu();
-  kernel_context_drq(handle_kill_helper, 0);
-  kdb_ke("Im dead");
-  return true;
+  //// make sure this thread really never runs again by migrating it
+  //// to the 'invalid' CPU forcefully and then switching to the kernel
+  //// thread for doing the last bits.
+  //force_to_invalid_cpu();
+  //kernel_context_drq(handle_kill_helper, 0);
+  //kdb_ke("Im dead");
+  //return true;
 }
 
 PRIVATE inline
@@ -597,18 +599,19 @@ PUBLIC
 bool
 Thread::kill()
 {
-  auto guard = lock_guard(cpu_lock);
+  panic("Thread::kill: sc not available here\n");
+  //auto guard = lock_guard(cpu_lock);
 
-  if (home_cpu() == current_cpu())
-    {
-      prepare_kill();
-      Sched_context::rq.current().deblock(sched(), current()->sched());
-      return true;
-    }
+  //if (home_cpu() == current_cpu())
+  //  {
+  //    prepare_kill();
+  //    Sched_context::rq.current().deblock(sched(), current()->sched());
+  //    return true;
+  //  }
 
-  drq(Thread::handle_remote_kill, 0);
+  //drq(Thread::handle_remote_kill, 0);
 
-  return true;
+  //return true;
 }
 
 
@@ -616,20 +619,22 @@ PUBLIC
 void
 Thread::set_sched_params(L4_sched_param const *p)
 {
-  Sched_context *sc = sched_context();
+  (void)p;
+  panic("Thread::set_sched_params: sc not available here\n");
+  //Sched_context *sc = sched_context();
 
-  // this can actually access the ready queue of a CPU that is offline remotely
-  Sched_context::Ready_queue &rq = Sched_context::rq.cpu(home_cpu());
-  rq.ready_dequeue(sched());
+  //// this can actually access the ready queue of a CPU that is offline remotely
+  //Sched_context::Ready_queue &rq = Sched_context::rq.cpu(home_cpu());
+  //rq.ready_dequeue(sched());
 
-  sc->set(p);
-  sc->replenish();
+  //sc->set(p);
+  //sc->replenish();
 
-  if (sc == rq.current_sched())
-    rq.set_current_sched(sc);
+  //if (sc == rq.current_sched())
+  //  rq.set_current_sched(sc);
 
-  if (state() & Thread_ready_mask) // maybe we could ommit enqueueing current
-    rq.ready_enqueue(sched());
+  //if (state() & Thread_ready_mask) // maybe we could ommit enqueueing current
+  //  rq.ready_enqueue(sched());
 }
 
 PUBLIC
@@ -663,8 +668,9 @@ PUBLIC static inline
 void
 Thread::assert_irq_entry()
 {
-  assert(Sched_context::rq.current().schedule_in_progress
-             || current_thread()->state() & (Thread_ready_mask | Thread_drq_wait | Thread_waiting | Thread_ipc_transfer));
+  panic("sc not accessible here\n");
+  //assert(Sched_context::rq.current().schedule_in_progress
+  //           || current_thread()->state() & (Thread_ready_mask | Thread_drq_wait | Thread_waiting | Thread_ipc_transfer));
 }
 
 // ---------------------------------------------------------------------------
@@ -967,64 +973,69 @@ PRIVATE inline
 bool
 Thread::migrate_away(Migration *inf, bool remote)
 {
-  assert (current() != this);
-  assert (cpu_lock.test());
-  bool resched = false;
+  (void)inf;
+  (void)remote;
+  panic("Thread::migrate_away: sc not available here\n");
+  //assert (current() != this);
+  //assert (cpu_lock.test());
+  //bool resched = false;
 
-  Cpu_number cpu = inf->cpu;
-  //  LOG_MSG_3VAL(this, "MGi ", Mword(current()), (current_cpu() << 16) | cpu(), Context::current_sched());
-  if (_timeout)
-    _timeout->reset();
+  //Cpu_number cpu = inf->cpu;
+  ////  LOG_MSG_3VAL(this, "MGi ", Mword(current()), (current_cpu() << 16) | cpu(), Context::current_sched());
+  //if (_timeout)
+  //  _timeout->reset();
 
-  if (!remote && home_cpu() == current_cpu())
-    {
-      auto &rq = Sched_context::rq.current();
+  //if (!remote && home_cpu() == current_cpu())
+  //  {
+  //    auto &rq = Sched_context::rq.current();
 
-      // if we are in the middle of the scheduler, leave it now
-      if (rq.schedule_in_progress == this)
-        rq.schedule_in_progress = 0;
+  //    // if we are in the middle of the scheduler, leave it now
+  //    if (rq.schedule_in_progress == this)
+  //      rq.schedule_in_progress = 0;
 
-      rq.ready_dequeue(sched());
+  //    rq.ready_dequeue(sched());
 
-        {
-          // Not sure if this can ever happen
-          Sched_context *csc = rq.current_sched();
-          if (csc == sched())
-            {
-              rq.set_current_sched(kernel_context(current_cpu())->sched());
-              resched = true;
-            }
-        }
-    }
+  //      {
+  //        // Not sure if this can ever happen
+  //        Sched_context *csc = rq.current_sched();
+  //        if (csc == sched())
+  //          {
+  //            rq.set_current_sched(kernel_context(current_cpu())->sched());
+  //            resched = true;
+  //          }
+  //      }
+  //  }
 
-  Sched_context *sc = sched_context();
-  sc->set(inf->sp);
-  sc->replenish();
-  set_sched(sc);
+  //Sched_context *sc = sched_context();
+  //sc->set(inf->sp);
+  //sc->replenish();
+  //set_sched(sc);
 
-  state_add_dirty(Thread_finish_migration);
-  set_home_cpu(cpu);
-  write_now(&inf->in_progress, true);
-  return resched;
+  //state_add_dirty(Thread_finish_migration);
+  //set_home_cpu(cpu);
+  //write_now(&inf->in_progress, true);
+  //return resched;
 }
 
 PRIVATE inline
 bool
 Thread::migrate_to(Cpu_number target_cpu, bool)
 {
-  if (!Cpu::online(target_cpu))
-    {
-      handle_drq();
-      return false;
-    }
+  (void)target_cpu;
+  panic("Thread::migrate_to: sc not available here\n");
+  //if (!Cpu::online(target_cpu))
+  //  {
+  //    handle_drq();
+  //    return false;
+  //  }
 
-  bool resched = false;
-  if (state() & Thread_ready_mask)
-    resched = Sched_context::rq.current().deblock(sched(), current()->sched());
+  //bool resched = false;
+  //if (state() & Thread_ready_mask)
+  //  resched = Sched_context::rq.current().deblock(sched(), current()->sched());
 
-  enqueue_timeout_again();
+  //enqueue_timeout_again();
 
-  return resched;
+  //return resched;
 }
 
 PUBLIC

@@ -51,6 +51,7 @@ public:
   };
 
   static Per_cpu<Ready_queue> rq;
+  static Per_cpu<Sched_context *> current;
 };
 
 //------------------------------------------------------------------------------
@@ -64,6 +65,7 @@ IMPLEMENTATION:
 #include "logdefs.h"
 
 DEFINE_PER_CPU Per_cpu<Sched_context::Ready_queue> Sched_context::rq;
+DEFINE_PER_CPU Per_cpu<Sched_context *> Sched_context::current;
 
 /**
  * Set currently active global Sched_context.
@@ -94,6 +96,8 @@ Sched_context::Ready_queue::set_current_sched(Sched_context *sched)
 
   // Make this timeslice current
   activate(sched);
+
+  current.current() = sched;
 
   LOG_SCHED_LOAD(sched);
 }

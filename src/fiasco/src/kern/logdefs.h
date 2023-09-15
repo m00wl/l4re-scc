@@ -52,6 +52,7 @@
 #define LOG_TRACE(name, sc, ctx, fmt, code...)                          \
   LOG_TRACE_COND(name, sc, ctx, fmt, true, code)
 
+/*
 #define LOG_CONTEXT_SWITCH                                              \
   LOG_TRACE("Context switch", "csw", this, Tb_entry_ctx_sw,             \
     Sched_context *cs = Sched_context::rq.current().current_sched();    \
@@ -63,6 +64,7 @@
     l->from_sched = cs;                                                 \
     l->from_prio = cs ? cs->prio() : 0;                                 \
     l->kernel_ip = (Mword)__builtin_return_address(0) )
+*/
 
 #define LOG_TRAP                                                        \
   LOG_TRACE_COND("Exceptions", "exc", current(), Tb_entry_trap,         \

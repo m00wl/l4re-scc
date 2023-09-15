@@ -318,25 +318,28 @@ PRIVATE inline
 Thread::Check_sender
 Thread::check_sender(Thread *sender, bool timeout)
 {
-  if (EXPECT_FALSE(is_invalid()))
-    {
-      sender->utcb().access()->error = L4_error::Not_existent;
-      return Check_sender::Failed;
-    }
+  (void)sender;
+  (void)timeout;
+  panic("Thread::check_sender: sc not available here\n");
+  //if (EXPECT_FALSE(is_invalid()))
+  //  {
+  //    sender->utcb().access()->error = L4_error::Not_existent;
+  //    return Check_sender::Failed;
+  //  }
 
-  if (auto ok = sender_ok(sender))
-    return ok;
+  //if (auto ok = sender_ok(sender))
+  //  return ok;
 
-  if (!timeout)
-    {
-      sender->utcb().access()->error = L4_error::Timeout;
-      return Check_sender::Failed;
-    }
+  //if (!timeout)
+  //  {
+  //    sender->utcb().access()->error = L4_error::Timeout;
+  //    return Check_sender::Failed;
+  //  }
 
-  sender->set_wait_queue(sender_list());
-  sender->sender_enqueue(sender_list(), sender->sched_context()->prio());
-  vcpu_set_irq_pending();
-  return Check_sender::Queued;
+  //sender->set_wait_queue(sender_list());
+  //sender->sender_enqueue(sender_list(), sender->sched_context()->prio());
+  //vcpu_set_irq_pending();
+  //return Check_sender::Queued;
 }
 
 /**
@@ -379,19 +382,23 @@ Thread::setup_timer(L4_timeout timeout, Utcb const *utcb, Timeout *timer)
 PRIVATE inline NEEDS["timer.h"]
 void Thread::goto_sleep(L4_timeout const &t, Sender *sender, Utcb *utcb)
 {
-  IPC_timeout timeout;
+  (void)t;
+  (void)sender;
+  (void)utcb;
+  panic("Thread::goto_sleep: sc not available here\n");
+  //IPC_timeout timeout;
 
-  state_del_dirty(Thread_ready);
-  setup_timer(t, utcb, &timeout);
+  //state_del_dirty(Thread_ready);
+  //setup_timer(t, utcb, &timeout);
 
-  if (sender == this)
-    switch_sched(sched(), &Sched_context::rq.current());
+  //if (sender == this)
+  //  switch_sched(sched(), &Sched_context::rq.current());
 
-  schedule();
+  //schedule();
 
-  reset_timeout();
+  //reset_timeout();
 
-  assert (state() & Thread_ready);
+  //assert (state() & Thread_ready);
 }
 
 
@@ -458,23 +465,28 @@ bool
 Thread::activate_ipc_partner(Thread *partner, Cpu_number current_cpu,
                              bool do_switch, bool closed_wait)
 {
-  if (partner->home_cpu() == current_cpu)
-    {
-      auto &rq = Sched_context::rq.current();
-      Sched_context *cs = rq.current_sched();
-      do_switch = do_switch && (closed_wait || cs != sched());
-      partner->state_change_dirty(~Thread_ipc_transfer, Thread_ready);
-      if (do_switch)
-        {
-          schedule_if(switch_exec_locked(partner, Not_Helping) != Switch::Ok);
-          return true;
-        }
-      else
-        return deblock_and_schedule(partner);
-    }
+  (void)partner;
+  (void)current_cpu;
+  (void)do_switch;
+  (void)closed_wait;
+  panic("Thread::activate_ipc_partner: sc not available here\n");
+  //if (partner->home_cpu() == current_cpu)
+  //  {
+  //    auto &rq = Sched_context::rq.current();
+  //    Sched_context *cs = rq.current_sched();
+  //    do_switch = do_switch && (closed_wait || cs != sched());
+  //    partner->state_change_dirty(~Thread_ipc_transfer, Thread_ready);
+  //    if (do_switch)
+  //      {
+  //        schedule_if(switch_exec_locked(partner, Not_Helping) != Switch::Ok);
+  //        return true;
+  //      }
+  //    else
+  //      return deblock_and_schedule(partner);
+  //  }
 
-  partner->xcpu_state_change(~Thread_ipc_transfer, Thread_ready);
-  return false;
+  //partner->xcpu_state_change(~Thread_ipc_transfer, Thread_ready);
+  //return false;
 }
 
 /**
@@ -1173,49 +1185,51 @@ Thread::remote_ipc_send(Ipc_remote_request *rq)
          rq->timeout);
 #endif
 
-  Check_sender r = rq->partner->check_sender(this, rq->timeout);
-  switch (r.s)
-    {
-    case Check_sender::Failed:
-      xcpu_state_change(~Thread_ipc_mask, 0);
-      rq->result = Check_sender::Failed;
-      return false;
-    case Check_sender::Queued:
-      rq->result = Check_sender::Queued;
-      return false;
-    default:
-      break;
-    }
+  (void)rq;
+  panic("Thread::remote_ipc_send: sc not available here\n");
+  //Check_sender r = rq->partner->check_sender(this, rq->timeout);
+  //switch (r.s)
+  //  {
+  //  case Check_sender::Failed:
+  //    xcpu_state_change(~Thread_ipc_mask, 0);
+  //    rq->result = Check_sender::Failed;
+  //    return false;
+  //  case Check_sender::Queued:
+  //    rq->result = Check_sender::Queued;
+  //    return false;
+  //  default:
+  //    break;
+  //  }
 
-  if (rq->tag.transfer_fpu()
-      && (rq->partner->_utcb_handler
-          || rq->partner->utcb().access()->inherit_fpu()))
-    rq->partner->spill_fpu_if_owner();
+  //if (rq->tag.transfer_fpu()
+  //    && (rq->partner->_utcb_handler
+  //        || rq->partner->utcb().access()->inherit_fpu()))
+  //  rq->partner->spill_fpu_if_owner();
 
-  // trigger remote_ipc_receiver_ready path, because we may need to grab locks
-  // and this is forbidden in a DRQ handler. So transfer the IPC in usual
-  // thread code. However, this induces a overhead of two extra IPIs.
-  if (rq->tag.items())
-    {
-      //LOG_MSG_3VAL(rq->partner, "pull", dbg_id(), 0, 0);
-      xcpu_state_change(~Thread_send_wait, Thread_ready);
-      rq->partner->state_change_dirty(~(Thread_ipc_mask | Thread_ready), Thread_ipc_transfer);
-      rq->result = r;
-      return true;
-    }
-  bool success = transfer_msg(rq->tag, rq->partner,
-                              _ipc_send_rights, r.is_open_wait());
-  if (success && rq->have_rcv)
-    xcpu_state_change(~Thread_send_wait, Thread_receive_wait);
-  else
-    xcpu_state_change(~Thread_ipc_mask, 0);
+  //// trigger remote_ipc_receiver_ready path, because we may need to grab locks
+  //// and this is forbidden in a DRQ handler. So transfer the IPC in usual
+  //// thread code. However, this induces a overhead of two extra IPIs.
+  //if (rq->tag.items())
+  //  {
+  //    //LOG_MSG_3VAL(rq->partner, "pull", dbg_id(), 0, 0);
+  //    xcpu_state_change(~Thread_send_wait, Thread_ready);
+  //    rq->partner->state_change_dirty(~(Thread_ipc_mask | Thread_ready), Thread_ipc_transfer);
+  //    rq->result = r;
+  //    return true;
+  //  }
+  //bool success = transfer_msg(rq->tag, rq->partner,
+  //                            _ipc_send_rights, r.is_open_wait());
+  //if (success && rq->have_rcv)
+  //  xcpu_state_change(~Thread_send_wait, Thread_receive_wait);
+  //else
+  //  xcpu_state_change(~Thread_ipc_mask, 0);
 
-  rq->result = success ? Check_sender::Done : Check_sender::Failed;
-  rq->partner->state_change_dirty(~Thread_ipc_mask, Thread_ready);
-  if (rq->partner->home_cpu() == current_cpu() && current() != rq->partner)
-    Sched_context::rq.current().ready_enqueue(rq->partner->sched());
+  //rq->result = success ? Check_sender::Done : Check_sender::Failed;
+  //rq->partner->state_change_dirty(~Thread_ipc_mask, Thread_ready);
+  //if (rq->partner->home_cpu() == current_cpu() && current() != rq->partner)
+  //  Sched_context::rq.current().ready_enqueue(rq->partner->sched());
 
-  return true;
+  //return true;
 }
 
 PRIVATE static

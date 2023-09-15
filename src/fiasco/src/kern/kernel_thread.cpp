@@ -67,47 +67,50 @@ IMPLEMENT FIASCO_INIT
 void
 Kernel_thread::bootstrap()
 {
-  // Initializations done -- Helping_lock can now use helping lock
-  Helping_lock::threading_system_active = true;
+  panic("Kernel_thread::bootstrap: sc not available here\n");
+  //// Initializations done -- Helping_lock can now use helping lock
+  //Helping_lock::threading_system_active = true;
 
-  // we need per CPU data for our never running dummy CPU too
-  // FIXME: we in fact need only the _pending_rqq lock
-  Per_cpu_data_alloc::alloc(Cpu::invalid());
-  Per_cpu_data::run_ctors(Cpu::invalid());
-  set_current_cpu(Cpu::boot_cpu()->id());
-  _home_cpu = Cpu::boot_cpu()->id();
-  Mem::barrier();
+  //// we need per CPU data for our never running dummy CPU too
+  //// FIXME: we in fact need only the _pending_rqq lock
+  //Per_cpu_data_alloc::alloc(Cpu::invalid());
+  //Per_cpu_data::run_ctors(Cpu::invalid());
+  //set_current_cpu(Cpu::boot_cpu()->id());
+  //_home_cpu = Cpu::boot_cpu()->id();
+  //Mem::barrier();
 
-  state_change_dirty(0, Thread_ready);		// Set myself ready
+  //state_change_dirty(0, Thread_ready);		// Set myself ready
 
-  Timer::init_system_clock();
-  Sched_context::rq.current().set_idle(this->sched());
+  //Timer::init_system_clock();
+  ////Sched_context::rq.current().set_idle(this->sched());
+  //Sched_context::rq.current().set_idle(this->sched());
 
-  Kernel_task::kernel_task()->make_current();
+  //Kernel_task::kernel_task()->make_current();
 
-  // Setup initial timeslice
-  Sched_context::rq.current().set_current_sched(sched());
+  //// Setup initial timeslice
+  ////Sched_context::rq.current().set_current_sched(sched());
+  //Sched_context::rq.current().set_current_sched(sched());
 
-  Timer_tick::setup(current_cpu());
-  assert (current_cpu() == Cpu_number::boot_cpu()); // currently the boot cpu must be 0
-  Mem_space::enable_tlb(current_cpu());
+  //Timer_tick::setup(current_cpu());
+  //assert (current_cpu() == Cpu_number::boot_cpu()); // currently the boot cpu must be 0
+  //Mem_space::enable_tlb(current_cpu());
 
-  Per_cpu_data::run_late_ctors(Cpu_number::boot_cpu());
-  Per_cpu_data::run_late_ctors(Cpu::invalid());
-  bootstrap_arch();
+  //Per_cpu_data::run_late_ctors(Cpu_number::boot_cpu());
+  //Per_cpu_data::run_late_ctors(Cpu::invalid());
+  //bootstrap_arch();
 
-  // Needs to be done before the timer is enabled. Otherwise after returning
-  // from printf() there could be a burst of timer interrupts distorting the
-  // timer loop calibration. The measurement intervals would be far too short.
-  printf("Calibrating timer loop... ");
-  Timer_tick::enable(current_cpu());
-  Proc::sti();
-  Watchdog::enable();
-  // Init delay loop, needs working timer interrupt
-  Delay::init();
-  printf("done.\n");
+  //// Needs to be done before the timer is enabled. Otherwise after returning
+  //// from printf() there could be a burst of timer interrupts distorting the
+  //// timer loop calibration. The measurement intervals would be far too short.
+  //printf("Calibrating timer loop... ");
+  //Timer_tick::enable(current_cpu());
+  //Proc::sti();
+  //Watchdog::enable();
+  //// Init delay loop, needs working timer interrupt
+  //Delay::init();
+  //printf("done.\n");
 
-  run();
+  //run();
 }
 
 /**
@@ -123,6 +126,7 @@ Kernel_thread::run()
   // No initcalls after this point!
 
   kernel_context(home_cpu(), this);
+  // TOMO: set kernel sc here?
 
   Rcu::leave_idle(home_cpu());
 

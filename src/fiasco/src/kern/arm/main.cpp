@@ -22,6 +22,7 @@ IMPLEMENTATION [arm]:
 #include "reset.h"
 #include "space.h"
 #include "terminate.h"
+#include "sched_context.h"
 
 #include "processor.h"
 
@@ -85,6 +86,8 @@ kernel_main()
 
   // create kernel thread
   static Kernel_thread *kernel = new (Ram_quota::root) Kernel_thread(Ram_quota::root);
+  static Sched_context *kernel_sc = new (Ram_quota::root) Sched_context();
+  kernel_sc->set_context(kernel);
   Task *const ktask = Kernel_task::kernel_task();
   kernel->kbind(ktask);
   assert(((Mword)kernel->init_stack() & 7) == 0);
