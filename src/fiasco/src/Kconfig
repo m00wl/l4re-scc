@@ -273,31 +273,31 @@ choice
 	prompt "Scheduler"
 	default SCHED_FIXED_PRIO
 
-config SCHED_FIXED_PRIO
-	bool "Fixed priority scheduler"
-	help
-	  Choose this for the standard fixed priority scheduler with
-	  256 priority levels.
-
 config SCHED_FCC
   bool "Scheduling contexts as first-class citizens"
   help
     Choose this scheduler to promote Scheduling contexts to
     first-class citizens.
 
-config SCHED_WFQ
-	bool "Weighted fair queueing scheduler"
-	depends on EXPERIMENTAL
-	help
-	  Choose this scheduler for a weighted fair queueing scheduler
-	  running with dynamic priorities.
-
-config SCHED_FP_WFQ
-	bool "Combined fixed priority RT and WFQ scheduler"
-	depends on EXPERIMENTAL
-	help
-	  Combination of Fixed priority and weighted fair queueing
-	  scheduler.
+#config SCHED_FIXED_PRIO
+#	bool "Fixed priority scheduler"
+#	help
+#	  Choose this for the standard fixed priority scheduler with
+#	  256 priority levels.
+#
+#config SCHED_WFQ
+#	bool "Weighted fair queueing scheduler"
+#	depends on EXPERIMENTAL
+#	help
+#	  Choose this scheduler for a weighted fair queueing scheduler
+#	  running with dynamic priorities.
+#
+#config SCHED_FP_WFQ
+#	bool "Combined fixed priority RT and WFQ scheduler"
+#	depends on EXPERIMENTAL
+#	help
+#	  Combination of Fixed priority and weighted fair queueing
+#	  scheduler.
 
 endchoice
 
