@@ -667,4 +667,4 @@ config ABI
 	default "vf"
 
 config CC_HAS_ASM_FLAG_OUTPUTS
-	def_bool $(shell,/bin/echo -e '#ifndef __GCC_ASM_FLAG_OUTPUTS__\n#error no\n#endif\n' | $(CC) -x c - -c -o /dev/null >/dev/null 2>&1 && echo y || echo n)
+	def_bool $(shell,/usr/bin/env echo -e '#ifndef __GCC_ASM_FLAG_OUTPUTS__\n#error no\n#endif\n' | $(CC) -x c - -c -o /dev/null >/dev/null 2>&1 && echo y || echo n)
