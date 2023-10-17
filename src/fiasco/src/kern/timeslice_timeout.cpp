@@ -33,23 +33,24 @@ PRIVATE
 bool
 Timeslice_timeout::expired() override
 {
-  Sched_context::Ready_queue &rq = Sched_context::rq.current();
-  Sched_context *sched = rq.current_sched();
+  panic("Timeslice_timeout: rq moved out of sc");
+  //Sched_context::Ready_queue &rq = Sched_context::rq.current();
+  //Sched_context *sched = rq.current_sched();
 
-  if (sched)
-    {
+  //if (sched)
+  //  {
 #if 0
       Context *owner = sched->owner();
 
       // Ensure sched is owner's current timeslice
       assert (owner->sched() == sched);
 #endif
-      sched->replenish();
-      rq.requeue(sched);
-      rq.invalidate_sched();
+  //    sched->replenish();
+  //    rq.requeue(sched);
+  //    rq.invalidate_sched();
 
-//      owner->switch_sched(sched);
-    }
+////      owner->switch_sched(sched);
+  //  }
 
-  return true;				// Force reschedule
+  //return true;				// Force reschedule
 }

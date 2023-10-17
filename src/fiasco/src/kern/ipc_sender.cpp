@@ -62,7 +62,7 @@ Ipc_sender_base::handle_shortcut(Syscall_frame *dst_regs,
 {
   (void)dst_regs;
   (void)receiver;
-  panic("sc not accessible here\n");
+  panic("Ipc_sender_base: handle_shortcut: sc not accessible here\n");
   //auto &rq = Sched_context::rq.current();
 
   //if (EXPECT_TRUE
@@ -123,7 +123,7 @@ Ipc_sender<Derived>::send_msg(Receiver *receiver, bool is_not_xcpu)
 {
   (void)receiver;
   (void)is_not_xcpu;
-  panic("sc not accessible here\n");
+  panic("Ipc_sender: send_msg: sc not accessible here\n");
   //set_wait_queue(receiver->sender_list());
 
   //if (!Config::Irq_shortcut)
