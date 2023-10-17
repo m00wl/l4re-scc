@@ -21,7 +21,6 @@ INTERFACE:
 #include <fiasco_defs.h>
 #include <cxx/function>
 
-
 class Entry_frame;
 class Context;
 class Kobject_iface;
@@ -441,6 +440,8 @@ IMPLEMENTATION:
 #include "thread_state.h"
 #include "timer.h"
 #include "timeout.h"
+#include "sched_context.h"
+#include "sc_scheduler.h"
 
 DEFINE_PER_CPU Per_cpu<Clock> Context::_clock(Per_cpu_data::Cpu_num);
 DEFINE_PER_CPU Per_cpu<Context *> Context::_kernel_ctxt;
@@ -722,6 +723,10 @@ PUBLIC
 void
 Context::schedule()
 {
+  auto current = SC_Scheduler::get_current();
+  auto prio = current->prio();
+  (void)prio;
+
   panic("c: schedule not available\n");
   //auto guard = lock_guard(cpu_lock);
   //assert (!Sched_context::rq.current().schedule_in_progress);
@@ -2413,5 +2418,3 @@ Tb_entry_ctx_sw::print(String_buffer *buf) const
 
   //buf->printf(" krnl " L4_PTR_FMT " @ " L4_PTR_FMT, kernel_ip, _ip);
 }
-
-

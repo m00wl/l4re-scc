@@ -23,6 +23,7 @@ IMPLEMENTATION [arm]:
 #include "space.h"
 #include "terminate.h"
 #include "sched_context.h"
+#include "sc_scheduler.h"
 
 #include "processor.h"
 
@@ -86,8 +87,10 @@ kernel_main()
 
   // create kernel thread
   static Kernel_thread *kernel = new (Ram_quota::root) Kernel_thread(Ram_quota::root);
-  static Sched_context *kernel_sc = new (Ram_quota::root) Sched_context();
+  // TOMO: make kernel sc special sc that implicitly has idle prio
+  static Sched_context *kernel_sc = new (Ram_quota::root) Sched_context(Config::Kernel_prio);
   kernel_sc->set_context(kernel);
+  SC_Scheduler::set_current(kernel_sc);
   Task *const ktask = Kernel_task::kernel_task();
   kernel->kbind(ktask);
   assert(((Mword)kernel->init_stack() & 7) == 0);

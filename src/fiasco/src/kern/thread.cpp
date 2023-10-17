@@ -190,6 +190,7 @@ IMPLEMENTATION:
 #include "task.h"
 #include "thread_state.h"
 #include "timeout.h"
+#include "sc_scheduler.h"
 
 JDB_DEFINE_TYPENAME(Thread,  "\033[32mThread\033[m");
 DEFINE_PER_CPU Per_cpu<unsigned long> Thread::nested_trap_recover;
@@ -398,25 +399,28 @@ Thread::continuation_test_and_restore()
 // state requests/manipulation
 //
 
-PUBLIC inline NEEDS ["config.h", "timeout.h"]
+PUBLIC inline NEEDS ["config.h", "timeout.h", "sc_scheduler.h"]
 void
 Thread::handle_timer_interrupt()
 {
-  panic("sc not accessible here\n");
-  //Cpu_number _cpu = current_cpu();
-  //// XXX: This assumes periodic timers (i.e. bogus in one-shot mode)
-  //if (!Config::Fine_grained_cputime)
-  //  consume_time(Config::Scheduler_granularity);
+  printf("timer interrupt\n");
+  //panic("Thread: handle_timer_interrupt: sc not accessible here\n");
+  Cpu_number _cpu = current_cpu();
+  // XXX: This assumes periodic timers (i.e. bogus in one-shot mode)
+  if (!Config::Fine_grained_cputime)
+    consume_time(Config::Scheduler_granularity);
 
-  //bool resched = Rcu::do_pending_work(_cpu);
+  bool resched = Rcu::do_pending_work(_cpu);
 
-  //// Check if we need to reschedule due to timeouts or wakeups
+  // Check if we need to reschedule due to timeouts or wakeups
+  if (Timeout_q::timeout_queue.cpu(_cpu).do_timeouts() || resched)
   //if ((Timeout_q::timeout_queue.cpu(_cpu).do_timeouts() || resched)
   //    && !Sched_context::rq.current().schedule_in_progress)
-  //  {
-  //    schedule();
-  //    assert (timeslice_timeout.cpu(current_cpu())->is_set());	// Coma check
-  //  }
+    {
+      printf("reschedule after timer interrupt\n");
+      SC_Scheduler::schedule(false);
+      assert (timeslice_timeout.cpu(current_cpu())->is_set());	// Coma check
+    }
 }
 
 

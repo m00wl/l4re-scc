@@ -41,6 +41,7 @@ public:
     Sched_context *current_sched() const { return _current_sched; }
 
   private:
+    // TOMO: is zero-initialized due to per_cpu data, but setting it explicitly would increase readability.
     Sched_context *_current_sched;
   };
 
