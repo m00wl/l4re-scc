@@ -271,7 +271,7 @@ config UX_NET
 
 choice
 	prompt "Scheduler"
-	default SCHED_FIXED_PRIO
+	default SCHED_FCC
 
 config SCHED_FCC
   bool "Scheduling contexts as first-class citizens"
