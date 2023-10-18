@@ -24,6 +24,8 @@ Kernel_thread::init_workload()
   Cap_index const C_factory = Cap_index(Initial_kobjects::Factory);
   Cap_index const C_thread  = Cap_index(Initial_kobjects::Thread);
   Cap_index const C_pager   = Cap_index(Initial_kobjects::Pager);
+  Cap_index const C_sched_context = Cap_index(Initial_kobjects::Sched_context);
+  // TOMO: we need a sched_context initial cap here?
 
   auto g = lock_guard(cpu_lock);
 
@@ -51,7 +53,7 @@ Kernel_thread::init_workload()
     {
       Kobject_iface *o = initial_kobjects.obj(c);
       if (o)
-	check(map(o, sigma0, sigma0, c, 0));
+        check(map(o, sigma0, sigma0, c, 0));
     }
 
   Thread_object *sigma0_thread = new (Ram_quota::root) Thread_object(Ram_quota::root);
@@ -65,6 +67,16 @@ Kernel_thread::init_workload()
   check (sigma0_thread->control(Thread_ptr(Thread_ptr::Null), Thread_ptr(Thread_ptr::Null)) == 0);
   check (sigma0_thread->bind(sigma0, User<Utcb>::Ptr((Utcb*)Mem_layout::Utcb_addr)));
   check (sigma0_thread->ex_regs(Kip::k()->sigma0_ip, 0));
+
+  // TOMO: creating and the deblocking the sched_context here already should not be a problem
+  // because:
+  // thread is initially blocked, we try to help -> thread is initialized to help idle.
+  Sched_context *sigma0_sc { Sched_context::create(Ram_quota::root) };
+  assert(sigma0_sc);
+  sigma0_sc->inc_ref();
+  sigma0_sc->set_context(sigma0_thread);
+  check(map(sigma0_sc, sigma0, sigma0, C_sched_context, 0));
+  SC_Scheduler::deblock(sigma0_sc);
 
   //
   // create the boot task
@@ -94,6 +106,13 @@ Kernel_thread::init_workload()
   check (boot_thread->bind(boot_task, User<Utcb>::Ptr((Utcb*)Mem_layout::Utcb_addr)));
   check (boot_thread->ex_regs(Kip::k()->root_ip, 0));
 
+  Sched_context *boot_sc { Sched_context::create(Ram_quota::root) };
+  assert(boot_sc);
+  boot_sc->inc_ref();
+  boot_sc->set_context(boot_thread);
+  check(map(boot_sc,   boot_task, boot_task, C_sched_context, 0));
+  SC_Scheduler::deblock(boot_sc);
+
   Ipc_gate *s0_b_gate = Ipc_gate::create(Ram_quota::root, sigma0_thread, 4 << 4);
 
   check (s0_b_gate);
@@ -108,7 +127,7 @@ Kernel_thread::init_workload()
     {
       Kobject_iface *o = initial_kobjects.obj(c);
       if (o)
-	check(obj_map(sigma0, c, 1, boot_task, c, 0).error() == 0);
+        check(obj_map(sigma0, c, 1, boot_task, c, 0).error() == 0);
     }
 
   boot_thread->activate();

@@ -12,12 +12,14 @@ INTERFACE [sched_fcc]:
 #include "ready_queue_fp.h"
 #include "kobject.h"
 #include "per_cpu_data.h"
+#include "ref_obj.h"
 
 class Context;
 
 class Sched_context
 : public cxx::D_list_item,
-  public cxx::Dyn_castable<Sched_context, Kobject>
+  public cxx::Dyn_castable<Sched_context, Kobject>,
+  public Ref_cnt_obj
 {
   MEMBER_OFFSET();
   //friend class Jdb_list_timeouts;

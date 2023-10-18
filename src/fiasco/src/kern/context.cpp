@@ -897,6 +897,7 @@ PUBLIC
 void
 Context::activate()
 {
+  printf("c: activate\n");
   auto guard = lock_guard(cpu_lock);
   if (xcpu_state_change(~0UL, Thread_ready, true))
     current()->switch_to_locked(this);
@@ -1392,28 +1393,26 @@ PUBLIC inline NEEDS[Context::pending_rqq_enqueue, "thread_state.h"]
 bool
 Context::xcpu_state_change(Mword mask, Mword add, bool lazy_q = false)
 {
-  (void)mask;
-  (void)add;
   (void)lazy_q;
-  panic("c: xcpu_state_change not available\n");
-  //Cpu_number current_cpu = ::current_cpu();
-  //if (EXPECT_FALSE(access_once(&_home_cpu) != current_cpu))
-  //  {
-  //    auto guard = lock_guard(_remote_state_change.lock);
-  //    if (EXPECT_TRUE(access_once(&_home_cpu) != current_cpu))
-  //      {
-  //        _remote_state_change.add = (_remote_state_change.add & mask) | add;
-  //        _remote_state_change.del = (_remote_state_change.del & ~add)  | ~mask;
-  //        guard.reset();
-  //        pending_rqq_enqueue();
-  //        return false;
-  //      }
-  //  }
+  //panic("c: xcpu_state_change not available\n");
+  Cpu_number current_cpu = ::current_cpu();
+  if (EXPECT_FALSE(access_once(&_home_cpu) != current_cpu))
+    {
+      auto guard = lock_guard(_remote_state_change.lock);
+      if (EXPECT_TRUE(access_once(&_home_cpu) != current_cpu))
+        {
+          _remote_state_change.add = (_remote_state_change.add & mask) | add;
+          _remote_state_change.del = (_remote_state_change.del & ~add)  | ~mask;
+          guard.reset();
+          pending_rqq_enqueue();
+          return false;
+        }
+    }
 
-  //state_change_dirty(mask, add);
+  state_change_dirty(mask, add);
   //if (add & Thread_ready_mask)
   //  return Sched_context::rq.current().deblock(sched(), current()->sched(), lazy_q);
-  //return false;
+  return false;
 }
 
 

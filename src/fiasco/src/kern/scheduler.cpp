@@ -34,7 +34,7 @@ IMPLEMENTATION:
 #include "l4_buf_iter.h"
 #include "l4_types.h"
 #include "entry_frame.h"
-#include "sched_context.h"
+#include "sc_scheduler.h"
 
 
 JDB_DEFINE_TYPENAME(Scheduler, "\033[34mSched\033[m");

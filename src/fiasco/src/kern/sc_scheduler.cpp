@@ -16,6 +16,7 @@ public:
 
   static Sched_context *get_current();
   static void set_current(Sched_context *);
+  static void deblock(Sched_context *);
   static void schedule(bool);
 
 private:
@@ -56,15 +57,15 @@ void
 SC_Scheduler::set_current(Sched_context *sc)
 {
   assert(sc);
-  Sched_context *&current = SC_Scheduler::current.current();
+  Sched_context *&current { SC_Scheduler::current.current() };
 
   // Save remainder of previous timeslice or refresh it, unless it had been invalidated
-  Timeout * const tt = timeslice_timeout.current();
-  Unsigned64 clock = Timer::system_clock();
+  Timeout * const tt { timeslice_timeout.current() };
+  Unsigned64 clock { Timer::system_clock() };
 
   if (current)
   {
-    Signed64 left = tt->get_timeout(clock);
+    Signed64 left { tt->get_timeout(clock) };
     if (left > 0)
       current->set_left(left);
     else
@@ -75,12 +76,21 @@ SC_Scheduler::set_current(Sched_context *sc)
 
   // Program new end-of-timeslice timeout
   tt->reset();
+  printf("setting timeout @ %llu\n", clock + sc->left());
   tt->set(clock + sc->left(), current_cpu());
 
   // Make this timeslice current
   current = sc;
 
   LOG_SCHED_LOAD(sched);
+}
+
+IMPLEMENT static
+void
+SC_Scheduler::deblock(Sched_context *sc)
+{
+  Ready_queue &rq { SC_Scheduler::rq.current() };
+  rq.enqueue(sc);
 }
 
 IMPLEMENT static

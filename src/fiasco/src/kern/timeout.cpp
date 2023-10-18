@@ -312,6 +312,7 @@ Timeout_q::do_timeouts()
   // ensure we always terminate
   assert((end >= 0) && (end < Wakeup_queue_count));
 
+  printf("checking timeouts @ %llu\n", now);
   for (;;)
     {
       To_list &q = first(start);
@@ -329,7 +330,7 @@ Timeout_q::do_timeouts()
       start = (start + 1) & (Wakeup_queue_count - 1);
 
       if (start == end)
-	break;
+        break;
     }
 
   if (Config::Scheduler_one_shot)

@@ -403,7 +403,7 @@ PUBLIC inline NEEDS ["config.h", "timeout.h", "sc_scheduler.h"]
 void
 Thread::handle_timer_interrupt()
 {
-  printf("timer interrupt\n");
+  //printf("timer interrupt\n");
   //panic("Thread: handle_timer_interrupt: sc not accessible here\n");
   Cpu_number _cpu = current_cpu();
   // XXX: This assumes periodic timers (i.e. bogus in one-shot mode)
