@@ -90,8 +90,7 @@ kernel_main()
   // TOMO: make kernel sc special sc that implicitly has idle prio
   static Sched_context *kernel_sc = Sched_context::create(Ram_quota::root, Config::Kernel_prio);
   kernel_sc->set_context(kernel);
-  SC_Scheduler::set_current(kernel_sc);
-  assert(SC_Scheduler::get_current() == kernel_sc);
+  Sched_context::set_kernel_sc(kernel_sc);
   Task *const ktask = Kernel_task::kernel_task();
   kernel->kbind(ktask);
   assert(((Mword)kernel->init_stack() & 7) == 0);

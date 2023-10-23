@@ -89,6 +89,7 @@ Kernel_thread::bootstrap()
 
   // Setup initial timeslice
   //Sched_context::rq.current().set_current_sched(sched());
+  SC_Scheduler::set_current(Sched_context::get_kernel_sc());
 
   Timer_tick::setup(current_cpu());
   assert (current_cpu() == Cpu_number::boot_cpu()); // currently the boot cpu must be 0

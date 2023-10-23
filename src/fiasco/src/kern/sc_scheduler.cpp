@@ -56,33 +56,19 @@ IMPLEMENT static
 void
 SC_Scheduler::set_current(Sched_context *sc)
 {
+  // TOMO: synchronization!?!?
   assert(sc);
-  Sched_context *&current { SC_Scheduler::current.current() };
 
-  // Save remainder of previous timeslice or refresh it, unless it had been invalidated
+  // Make sc current.
+  Sched_context *&current { SC_Scheduler::current.current() };
+  current = sc;
+
+  // Program new end-of-timeslice timeout.
   Timeout * const tt { timeslice_timeout.current() };
   Unsigned64 clock { Timer::system_clock() };
-
-  if (current)
-  {
-    Signed64 left { tt->get_timeout(clock) };
-    if (left > 0)
-      current->set_left(left);
-    else
-      current->replenish();
-
-    LOG_SCHED_SAVE(s);
-  }
-
-  // Program new end-of-timeslice timeout
   tt->reset();
   printf("setting timeout @ %llu\n", clock + sc->left());
   tt->set(clock + sc->left(), current_cpu());
-
-  // Make this timeslice current
-  current = sc;
-
-  LOG_SCHED_LOAD(sched);
 }
 
 IMPLEMENT static
@@ -97,12 +83,15 @@ IMPLEMENT static
 void
 SC_Scheduler::schedule(bool blocked)
 {
-  Sched_context *current { SC_Scheduler::current.current() };
+  Sched_context *&current { SC_Scheduler::current.current() };
   Sched_context *next;
   Ready_queue &rq { SC_Scheduler::rq.current() };
 
   assert(current);
   assert(blocked || !current->in_ready_list());
+
+  // TOMO: why do we need left anyway?
+  current->replenish();
 
   if (EXPECT_TRUE (!blocked))
     rq.enqueue(current);
@@ -112,14 +101,14 @@ SC_Scheduler::schedule(bool blocked)
   for (;;)
   {
     next = rq.dequeue();
-    // make next current
-
+    current = next;
+    // make CPU go brrrr.
   }
 
 }
 
 IMPLEMENT
-  void
+void
 SC_Scheduler::Ready_queue::enqueue(Sched_context *sc)
 {
   assert(cpu_lock.test());
@@ -135,7 +124,7 @@ SC_Scheduler::Ready_queue::enqueue(Sched_context *sc)
 }
 
 IMPLEMENT inline NEEDS ["cpu_lock.h", <cassert>, "std_macros.h"]
-  Sched_context *
+Sched_context *
 SC_Scheduler::Ready_queue::dequeue()
 {
   assert(cpu_lock.test());
