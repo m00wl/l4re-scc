@@ -25,6 +25,8 @@ class Entry_frame;
 class Context;
 class Kobject_iface;
 
+class Sched_context;
+
 class Context_ptr
 {
 public:
@@ -322,7 +324,7 @@ private:
   // anonymous reference to them as we do not need them ourselves, but
   // we aggregate them for performance reasons.
   //Sched_context _sched_context;
-  //Sched_context *_sched;
+  Sched_context *_sched;
 
   // Pointer to floating point register state
   Fpu_state _fpu_state;
@@ -473,9 +475,9 @@ Context::Context()
   // TCBs are zero initialized. Thus, members not explictly initialized can be
   // assumed to be zero-initialized, unless their default constructor does
   // something different.
-  _helper(this)
+  _helper(this),
   //_sched_context(this),
-  //_sched(&_sched_context)
+  _sched(nullptr) // TOMO: this is dangerous and definitely won't hurt us later...
 {
   _home_cpu = Cpu::invalid();
 }
@@ -833,27 +835,27 @@ Context::schedule_if(bool s)
 //  return 0;
 //}
 
-///**
-// * Return Context's currently active Sched_context.
-// * @return Active Sched_context
-// */
-//PUBLIC inline
-//Sched_context *
-//Context::sched() const
-//{
-//  return _sched;
-//}
+/**
+ * Return Context's currently active Sched_context.
+ * @return Active Sched_context
+ */
+PUBLIC inline
+Sched_context *
+Context::sched() const
+{
+  return _sched;
+}
 
-///**
-// * Set Context's currently active Sched_context.
-// * @param sched Sched_context to be activated
-// */
-//PROTECTED inline
-//void
-//Context::set_sched(Sched_context * const sched)
-//{
-//  _sched = sched;
-//}
+/**
+ * Set Context's currently active Sched_context.
+ * @param sched Sched_context to be activated
+ */
+PUBLIC inline
+void
+Context::set_sched(Sched_context * const sched)
+{
+  _sched = sched;
+}
 
 // queue operations
 
@@ -1042,24 +1044,24 @@ Context::deblock_and_schedule(Context *to)
  */
 PUBLIC
 Context::Switch FIASCO_WARN_RESULT //L4_IPC_CODE
-Context::switch_exec_locked(Context *t, enum Helping_mode mode)
+Context::switch_exec_locked(Context *t, enum Helping_mode mode = Not_Helping)
 {
-  (void)t;
-  (void)mode;
-  panic("c: switch_exec_locked not available\n");
-  //// Must be called with CPU lock held
-  //assert (t);
-  //assert (cpu_lock.test());
-  //assert (current() != t);
-  //assert (current() == this);
+  //(void)t;
+  //(void)mode;
+  //panic("c: switch_exec_locked not available\n");
+  // Must be called with CPU lock held
+  assert (t);
+  assert (cpu_lock.test());
+  assert (current() != t);
+  assert (current() == this);
 
-  //// only for logging
-  //Context *t_orig = t;
-  //(void)t_orig;
+  // only for logging
+  Context *t_orig = t;
+  (void)t_orig;
 
-  //// Time-slice lending: if t is locked, switch to its locker
-  //// instead, this is transitive
-  ////
+  // Time-slice lending: if t is locked, switch to its locker
+  // instead, this is transitive
+  //
 
   //if (EXPECT_FALSE(t->running_on_different_cpu()))
   //  {
@@ -1069,31 +1071,31 @@ Context::switch_exec_locked(Context *t, enum Helping_mode mode)
   //  }
 
 
-  //LOG_CONTEXT_SWITCH;
-  //CNT_CONTEXT_SWITCH;
+  LOG_CONTEXT_SWITCH;
+  CNT_CONTEXT_SWITCH;
 
-  //// Can only switch to ready threads!
-  //// do not consider CPU locality here t can be temporarily migrated
-  //if (EXPECT_FALSE (!(t->state(false) & Thread_ready_mask)))
-  //  {
-  //    assert (state(false) & Thread_ready_mask);
-  //    return Switch::Failed;
-  //  }
+  // Can only switch to ready threads!
+  // do not consider CPU locality here t can be temporarily migrated
+  if (EXPECT_FALSE (!(t->state(false) & Thread_ready_mask)))
+    {
+      assert (state(false) & Thread_ready_mask);
+      return Switch::Failed;
+    }
 
 
-  //// Ensure kernel stack pointer is non-null if thread is ready
-  //assert (t->_kernel_sp);
+  // Ensure kernel stack pointer is non-null if thread is ready
+  assert (t->_kernel_sp);
 
-  //t->set_helper(mode);
+  t->set_helper(mode);
 
   //if (EXPECT_TRUE(get_current_cpu() == home_cpu()))
   //  update_ready_list();
 
-  //t->set_current_cpu(get_current_cpu());
-  //switch_fpu(t);
-  //switch_cpu(t);
+  t->set_current_cpu(get_current_cpu());
+  switch_fpu(t);
+  switch_cpu(t);
 
-  //return switch_handle_drq();
+  return switch_handle_drq();
 }
 
 PUBLIC

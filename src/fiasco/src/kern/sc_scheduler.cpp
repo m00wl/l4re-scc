@@ -84,7 +84,7 @@ void
 SC_Scheduler::schedule(bool blocked)
 {
   Sched_context *&current { SC_Scheduler::current.current() };
-  Sched_context *next;
+  Sched_context *old, *next;
   Ready_queue &rq { SC_Scheduler::rq.current() };
 
   assert(current);
@@ -96,14 +96,18 @@ SC_Scheduler::schedule(bool blocked)
   if (EXPECT_TRUE (!blocked))
     rq.enqueue(current);
 
-  panic("sc_scheduler: schedule not implemented yet");
 
-  for (;;)
-  {
-    next = rq.dequeue();
-    current = next;
-    // make CPU go brrrr.
-  }
+  //for (;;)
+  //{
+  old = current;
+  next = rq.dequeue();
+  set_current(next);
+  // TOMO: ugly :(
+  // don't use current from here on.
+  auto res { old->context()->switch_exec_locked(next->context()) };
+  (void) res;
+  panic("sc_scheduler: schedule not implemented yet");
+  //}
 
 }
 

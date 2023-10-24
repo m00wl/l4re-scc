@@ -107,7 +107,14 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
            cxx::int_value<Cpu_number>(sched_param->cpus.offset()),
            cxx::int_value<Order>(sched_param->cpus.granularity()));
 
-  thread->migrate(&info);
+  printf("hello scheduler\n");
+  //thread->migrate(&info);
+  // TOMO: ugly :(
+  // this is because with the legacy interface, "schedule thread" is also used to set sched parameters.
+  // with new interface, userspace should interact with sched_context cap directly.
+  thread->sched()->set(sched_param);
+  if (thread != current())
+    SC_Scheduler::schedule(false);
 
   return commit_result(0);
 }
