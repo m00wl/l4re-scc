@@ -12,7 +12,7 @@ INTERFACE:
 class SC_Scheduler
 {
 public:
-  static constexpr unsigned short priorities { 256 };
+  static constexpr Unsigned8 priorities { 255 };
 
   static Sched_context *get_current();
   static void set_current(Sched_context *);
@@ -28,7 +28,7 @@ private:
 
   private:
     typedef cxx::Sd_list<Sched_context> Queue;
-    unsigned prio_highest { 0 };
+    Unsigned8 prio_highest { 0 };
     Queue queue[priorities];
   };
 

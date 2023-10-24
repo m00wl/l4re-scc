@@ -147,6 +147,7 @@ IMPLEMENTATION:
 #include "processor.h"
 #include "timer.h"
 #include "warn.h"
+#include "sc_scheduler.h"
 
 PUBLIC
 void
@@ -382,23 +383,28 @@ Thread::setup_timer(L4_timeout timeout, Utcb const *utcb, Timeout *timer)
 PRIVATE inline NEEDS["timer.h"]
 void Thread::goto_sleep(L4_timeout const &t, Sender *sender, Utcb *utcb)
 {
-  (void)t;
+  //(void)t;
   (void)sender;
-  (void)utcb;
-  panic("Thread::goto_sleep: sc not available here\n");
-  //IPC_timeout timeout;
+  //(void)utcb;
+  //panic("Thread::goto_sleep: sc not available here\n");
 
-  //state_del_dirty(Thread_ready);
-  //setup_timer(t, utcb, &timeout);
+  // TOMO: this function is on the IPC path.
+  // -> legacy implementation updates the ready queue lazily
+  //    (the blocked sc is not immediately removed from the ready queue)
+
+  IPC_timeout timeout;
+
+  state_del_dirty(Thread_ready);
+  setup_timer(t, utcb, &timeout);
 
   //if (sender == this)
   //  switch_sched(sched(), &Sched_context::rq.current());
 
-  //schedule();
+  SC_Scheduler::schedule(true);
 
-  //reset_timeout();
+  reset_timeout();
 
-  //assert (state() & Thread_ready);
+  assert (state() & Thread_ready);
 }
 
 
