@@ -616,6 +616,7 @@ int main(int argc, char**argv)
         }
 
       // we handle our exceptions ourselves
+      info.printf("going into server loop now\n");
       server.loop_noexc(My_dispatcher<L4::Basic_registry>());
     }
   catch (L4::Out_of_memory const &e)

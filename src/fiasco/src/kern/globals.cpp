@@ -40,7 +40,7 @@ public:
     Sched_context = 12,
 
     First_alloc_cap = Log,
-    Num_alloc       = 7,
+    Num_alloc       = 8,
     End_alloc_cap   = First_alloc_cap + Num_alloc,
   };
 
