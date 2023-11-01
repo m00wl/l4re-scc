@@ -307,6 +307,16 @@ Thread::~Thread()		// To be called in locked state.
   assert (!in_ready_list());
 }
 
+PUBLIC
+void
+Thread::alloc_sched_context(Unsigned8 prio)
+{
+  Sched_context *sc = Sched_context::create(_quota, prio);
+  sc->inc_ref();
+  this->set_sched(sc);
+  sc->set_context(this);
+}
+
 // IPC-gate deletion stuff ------------------------------------
 
 /**

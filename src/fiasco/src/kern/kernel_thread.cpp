@@ -183,6 +183,7 @@ PUBLIC inline NEEDS["processor.h"]
 void
 Kernel_thread::idle_op()
 {
+  printf("hello from idle.\n");
   if (Config::hlt_works_ok)
     Proc::halt();			// stop the CPU, waiting for an int
   else

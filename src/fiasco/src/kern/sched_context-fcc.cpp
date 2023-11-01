@@ -60,7 +60,7 @@ public:
   void *operator new(size_t);
 
 private:
-  unsigned short _prio;
+  Unsigned8 _prio;
   Unsigned64 _quantum;
   Unsigned64 _left;
 
@@ -98,12 +98,41 @@ Sched_context::Sched_context()
 {}
 
 PUBLIC
-Sched_context::Sched_context(unsigned short prio)
+Sched_context::Sched_context(Unsigned8 prio)
 : _prio(prio),
   _quantum(Config::Default_time_slice),
   _left(Config::Default_time_slice),
   _context(nullptr) //TOMO: this is highly unsafe.
 {}
+
+PUBLIC
+Sched_context::Sched_context(Unsigned8 prio, Unsigned64 quantum)
+: _prio(prio),
+  _quantum(quantum),
+  _left(quantum),
+  _context(nullptr) //TOMO: this is highly unsafe.
+{}
+
+PUBLIC
+Sched_context::~Sched_context()
+{
+  printf("sched_context was deleted\n");
+}
+
+PUBLIC //inline
+void
+Sched_context::operator delete (void *ptr)
+{
+  Sched_context *sc = reinterpret_cast<Sched_context *>(ptr);
+  //LOG_TRACE("Kobject delete", "del", current(), Log_destroy,
+  //          l->id = t->dbg_id();
+  //          l->obj = t;
+  //          l->type = cxx::Typeid<Sched_context>::get();
+  //          l->ram = t->ram_quota()->current());
+
+  allocator()->free(sc);
+}
+
 
 PUBLIC inline NEEDS[<cstddef>]
 void *
@@ -119,7 +148,7 @@ Sched_context::allocator()
 
 PUBLIC static
 Sched_context *
-Sched_context::create(Ram_quota *q, unsigned short prio = Config::Default_prio)
+Sched_context::create(Ram_quota *q, Unsigned8 prio = Config::Default_prio, Unsigned64 quantum = Config::Default_time_slice)
 {
   Auto_quota<Ram_quota> quota(q, sizeof(Sched_context));
 
@@ -131,7 +160,7 @@ Sched_context::create(Ram_quota *q, unsigned short prio = Config::Default_prio)
     return 0;
 
   quota.release();
-  return new (nq) Sched_context(prio);
+  return new (nq) Sched_context(prio, quantum);
 }
 
 PUBLIC static inline
@@ -186,6 +215,7 @@ PUBLIC
 void
 Sched_context::set(L4_sched_param const *_p)
 {
+  printf("changing parameters of this sched_context\n");
   Sp const *p = reinterpret_cast<Sp const *>(_p);
   if (_p->is_legacy())
   {

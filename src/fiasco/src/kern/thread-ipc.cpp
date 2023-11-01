@@ -319,28 +319,33 @@ PRIVATE inline
 Thread::Check_sender
 Thread::check_sender(Thread *sender, bool timeout)
 {
-  (void)sender;
-  (void)timeout;
-  panic("Thread::check_sender: sc not available here\n");
-  //if (EXPECT_FALSE(is_invalid()))
-  //  {
-  //    sender->utcb().access()->error = L4_error::Not_existent;
-  //    return Check_sender::Failed;
-  //  }
+  //(void)sender;
+  //(void)timeout;
+  //panic("Thread::check_sender: sc not available here\n");
+  if (EXPECT_FALSE(is_invalid()))
+    {
+      sender->utcb().access()->error = L4_error::Not_existent;
+      return Check_sender::Failed;
+    }
 
-  //if (auto ok = sender_ok(sender))
-  //  return ok;
+  if (auto ok = sender_ok(sender))
+    return ok;
 
-  //if (!timeout)
-  //  {
-  //    sender->utcb().access()->error = L4_error::Timeout;
-  //    return Check_sender::Failed;
-  //  }
+  if (!timeout)
+    {
+      sender->utcb().access()->error = L4_error::Timeout;
+      return Check_sender::Failed;
+    }
 
-  //sender->set_wait_queue(sender_list());
-  //sender->sender_enqueue(sender_list(), sender->sched_context()->prio());
-  //vcpu_set_irq_pending();
-  //return Check_sender::Queued;
+  sender->set_wait_queue(sender_list());
+  // TOMO: ugly, because we walk C->SC :(
+  // idea: do_ipc (with partner) is always initiated from the sender
+  // means: we always run with the sender's sched context.
+  // means: we can take prio and stuff from SC_Scheduler::get_current.
+  //sender->sender_enqueue(sender_list(), sender->sched()->prio());
+  sender->sender_enqueue(sender_list(), SC_Scheduler::get_current()->prio());
+  vcpu_set_irq_pending();
+  return Check_sender::Queued;
 }
 
 /**
@@ -400,7 +405,9 @@ void Thread::goto_sleep(L4_timeout const &t, Sender *sender, Utcb *utcb)
   //if (sender == this)
   //  switch_sched(sched(), &Sched_context::rq.current());
 
+  printf("going to sleep because IPC partner is not ready yet.\n");
   SC_Scheduler::schedule(true);
+  printf("waking up because IPC partner unblocked me.\n");
 
   reset_timeout();
 
@@ -478,13 +485,17 @@ Thread::activate_ipc_partner(Thread *partner, Cpu_number current_cpu,
   panic("Thread::activate_ipc_partner: sc not available here\n");
   //if (partner->home_cpu() == current_cpu)
   //  {
-  //    auto &rq = Sched_context::rq.current();
-  //    Sched_context *cs = rq.current_sched();
+  //    //auto &rq = Sched_context::rq.current();
+  //    //Sched_context *cs = rq.current_sched();
+  //    Sched_context *cs = SC_Scheduler::get_current();
   //    do_switch = do_switch && (closed_wait || cs != sched());
   //    partner->state_change_dirty(~Thread_ipc_transfer, Thread_ready);
   //    if (do_switch)
   //      {
-  //        schedule_if(switch_exec_locked(partner, Not_Helping) != Switch::Ok);
+  //        //schedule_if(switch_exec_locked(partner, Not_Helping) != Switch::Ok);
+  //        if (switch_exec_locked(partner, Not_Helping) != Switch::Ok) {
+  //          SC_Scheduler::schedule(false);
+  //        }
   //        return true;
   //      }
   //    else
@@ -534,7 +545,8 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
   assert (!(state() & Thread_ipc_mask));
 
   prepare_receive(sender, have_receive ? regs : 0);
-  bool activate_partner = false;
+  //bool activate_partner = false;
+  bool deblock_partner = false;
   Cpu_number current_cpu = ::current_cpu();
 
   if (partner)
@@ -594,6 +606,7 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
             partner->reset_timeout();
 
           ok = transfer_msg(tag, partner, rights, result.is_open_wait());
+          printf("transfering IPC message...\n");
 
           // transfer is also a possible migration point
           current_cpu = ::current_cpu();
@@ -603,7 +616,11 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
           if (ok && have_receive)
             state_add_dirty(Thread_receive_wait);
 
-          activate_partner = partner != this;
+          // TOMO: activate partner is an optimization.
+          // we turn that off for now...
+          //activate_partner = partner != this;
+          // TOMO: however, we need to deblock the partner:
+          deblock_partner = partner != this;
           break;
         }
 
@@ -632,18 +649,27 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
       next = get_next_sender(sender);
     }
 
-  if (activate_partner
-      && activate_ipc_partner(partner, current_cpu, do_switch && !next,
-                              have_receive && sender))
-    {
-      // blocked so might have a new sender queued
-      have_receive = state() & Thread_receive_wait;
-      if (have_receive && !next)
-        next = get_next_sender(sender);
-    }
+  //if (activate_partner
+  //    && activate_ipc_partner(partner, current_cpu, do_switch && !next,
+  //                            have_receive && sender))
+  //  {
+  //    // blocked so might have a new sender queued
+  //    have_receive = state() & Thread_receive_wait;
+  //    if (have_receive && !next)
+  //      next = get_next_sender(sender);
+  //  }
+  if (deblock_partner)
+  {
+    printf("i am unblocking my IPC partner\n");
+    partner->xcpu_state_change(~Thread_ipc_transfer, Thread_ready);
+    assert(partner->sched());
+    printf("partners sched context: addr=%p prio=%d\n", partner->sched(), partner->sched()->prio());
+    SC_Scheduler::deblock(partner->sched());
+  }
 
   if (next)
     {
+      printf("next was hit\n");
       state_change_dirty(~Thread_ipc_mask, Thread_receive_in_progress);
       next->ipc_send_msg(this, !sender);
       state_del_dirty(Thread_ipc_mask);
@@ -651,6 +677,11 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
   else if (have_receive)
     {
       if ((state() & Thread_full_ipc_mask) == Thread_receive_wait)
+        // TOMO: we broke the IPC fastpath.
+        // moe goes to sleep here because he expects an immediate answer to his page-fault.
+        // however, he also expects the fastpath to directly switch to sigma0 after ipc message has been transfered.
+        // for this reason, this function does not take care to deblock sigma0 here.
+        // but we expect it for now.
         goto_sleep(t.rcv, sender, utcb().access(true));
     }
 
@@ -666,6 +697,7 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
     {
       state_del_dirty(Thread_ready);
       schedule();
+      //SC_Scheduler::schedule(true);
       state = this->state();
    }
 

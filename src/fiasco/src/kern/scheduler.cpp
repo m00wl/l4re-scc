@@ -107,11 +107,20 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
            cxx::int_value<Cpu_number>(sched_param->cpus.offset()),
            cxx::int_value<Order>(sched_param->cpus.granularity()));
 
-  printf("hello scheduler\n");
   //thread->migrate(&info);
   // TOMO: ugly :(
   // this is because with the legacy interface, "schedule thread" is also used to set sched parameters.
   // with new interface, userspace should interact with sched_context cap directly.
+  printf("hello scheduler\n");
+  if (!thread->sched())
+  {
+    printf("try to run a thread that has no sched_context attached.\n");
+    printf("creating a new one...\n");
+    // TOMO: set prio directly from sched_param.
+    thread->alloc_sched_context(Config::Default_prio);
+    SC_Scheduler::deblock(thread->sched());
+  }
+
   thread->sched()->set(sched_param);
   if (thread != current())
     SC_Scheduler::schedule(false);

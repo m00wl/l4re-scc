@@ -1052,8 +1052,15 @@ Context::switch_exec_locked(Context *t, enum Helping_mode mode = Not_Helping)
   // Must be called with CPU lock held
   assert (t);
   assert (cpu_lock.test());
-  assert (current() != t);
   assert (current() == this);
+  //assert (current() != t);
+  if (current() == t)
+  {
+    printf("thread scheduled to itself.\n");
+    LOG_CONTEXT_SWITCH;
+    CNT_CONTEXT_SWITCH;
+    return switch_handle_drq();
+  }
 
   // only for logging
   Context *t_orig = t;
@@ -1602,29 +1609,31 @@ PUBLIC
 bool
 Context::enqueue_drq(Drq *rq)
 {
-  (void)rq;
-  panic("c: enqueue_drq not available\n");
-  //assert (cpu_lock.test());
+  //(void)rq;
+  //panic("c: enqueue_drq not available\n");
+  assert (cpu_lock.test());
 
-  //LOG_TRACE("DRQ handling", "drq", current(), Drq_log,
-  //    l->type = rq->context() == this
-  //                               ? Drq_log::Type::Send_reply
-  //                               : Drq_log::Type::Do_send;
-  //    l->func = (void*)rq->func;
-  //    l->thread = this;
-  //    l->target_cpu = home_cpu();
-  //    l->wait = 0;
-  //    l->rq = rq;
-  //);
+  LOG_TRACE("DRQ handling", "drq", current(), Drq_log,
+      l->type = rq->context() == this
+                                 ? Drq_log::Type::Send_reply
+                                 : Drq_log::Type::Do_send;
+      l->func = (void*)rq->func;
+      l->thread = this;
+      l->target_cpu = home_cpu();
+      l->wait = 0;
+      l->rq = rq;
+  );
 
-  //bool do_sched = _drq_q.execute_request(rq, Drq_q::No_drop, true);
-  //if (   access_once(&_home_cpu) == current_cpu()
-  //    && (state() & Thread_ready_mask) && !in_ready_list())
-  //  {
-  //    Sched_context::rq.current().ready_enqueue(sched());
-  //    return true;
-  //  }
-  //return do_sched;
+  bool do_sched = _drq_q.execute_request(rq, Drq_q::No_drop, true);
+  if (   access_once(&_home_cpu) == current_cpu()
+      && (state() & Thread_ready_mask) && !in_ready_list())
+    {
+      //Sched_context::rq.current().ready_enqueue(sched());
+      //return true;
+      SC_Scheduler::deblock(this->sched());
+      return true;
+    }
+  return do_sched;
 }
 
 PUBLIC inline

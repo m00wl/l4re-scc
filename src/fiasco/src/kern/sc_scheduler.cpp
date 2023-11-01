@@ -12,7 +12,7 @@ INTERFACE:
 class SC_Scheduler
 {
 public:
-  static constexpr Unsigned8 priorities { 255 };
+  static constexpr auto priorities { 256 };
 
   static Sched_context *get_current();
   static void set_current(Sched_context *);
@@ -25,6 +25,7 @@ private:
   public:
     void enqueue(Sched_context *);
     Sched_context *dequeue();
+    int c = 0;
 
   private:
     typedef cxx::Sd_list<Sched_context> Queue;
@@ -99,6 +100,7 @@ SC_Scheduler::schedule(bool blocked)
 
   //for (;;)
   //{
+  printf("we schedule now... (RQ has %d entries.)\n", rq.c);
   old = current;
   next = rq.dequeue();
   set_current(next);
@@ -106,7 +108,7 @@ SC_Scheduler::schedule(bool blocked)
   // don't use current from here on.
   auto res { old->context()->switch_exec_locked(next->context()) };
   (void) res;
-  panic("sc_scheduler: schedule not implemented yet");
+  //panic("sc_scheduler: schedule not implemented yet");
   //}
 
 }
@@ -125,6 +127,7 @@ SC_Scheduler::Ready_queue::enqueue(Sched_context *sc)
     prio_highest = sc->prio();
 
   queue[sc->prio()].push_back(sc);
+  c++;
 }
 
 IMPLEMENT inline NEEDS ["cpu_lock.h", <cassert>, "std_macros.h"]
@@ -143,5 +146,6 @@ SC_Scheduler::Ready_queue::dequeue()
   while (queue[prio_highest].empty() && prio_highest)
     prio_highest--;
 
+  c--;
   return sc;
 }

@@ -68,9 +68,8 @@ Kernel_thread::init_workload()
   check (sigma0_thread->bind(sigma0, User<Utcb>::Ptr((Utcb*)Mem_layout::Utcb_addr)));
   check (sigma0_thread->ex_regs(Kip::k()->sigma0_ip, 0));
 
-  // TOMO: creating and the deblocking the sched_context here already should not be a problem
-  // because:
-  // thread is initially blocked, we try to help -> thread is initialized to help idle.
+  // TOMO: creating and then deblocking the sched_context here already surely is no problem...
+  // OR IS IT?
   Sched_context *sigma0_sc { Sched_context::create(Ram_quota::root) };
   assert(sigma0_sc);
   sigma0_sc->inc_ref();
