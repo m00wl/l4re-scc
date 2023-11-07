@@ -260,7 +260,6 @@ pager(void)
   /* now start serving the subtasks */
   for (;;)
     {
-      L4::cout << "sigma0: wait for request\n";
       tag = l4_ipc_wait(utcb, &t, L4_IPC_NEVER);
       if (0)
         L4::cout << PROG_NAME << ": rcv: " << tag << "\n";
