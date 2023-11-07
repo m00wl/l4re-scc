@@ -19,12 +19,18 @@ public:
   static void deblock(Sched_context *);
   static void schedule(bool);
 
-private:
+// TOMO: ideally, we do not want to expose the ready_queue to the outside world,
+// because this enables complex side-effects.
+// Normally, every interaction should go through SC_Scheduler.
+// BUT: migration code needs to manipulate the queue directly,
+// so we expose it for now. maybe refractor this later?
+public:
   class Ready_queue
   {
   public:
     void enqueue(Sched_context *);
-    Sched_context *dequeue();
+    void dequeue(Sched_context *);
+    Sched_context *next();
     int c = 0;
 
   private:
@@ -60,16 +66,26 @@ SC_Scheduler::set_current(Sched_context *sc)
   // TOMO: synchronization!?!?
   assert(sc);
 
-  // Make sc current.
-  Sched_context *&current { SC_Scheduler::current.current() };
-  current = sc;
-
-  // Program new end-of-timeslice timeout.
+    // Program new end-of-timeslice timeout.
   Timeout * const tt { timeslice_timeout.current() };
   Unsigned64 clock { Timer::system_clock() };
   tt->reset();
-  printf("setting timeout @ %llu\n", clock + sc->left());
+  //printf("setting timeslice timeout @ %llu\n", clock + sc->left());
   tt->set(clock + sc->left(), current_cpu());
+
+  // Update left of current.
+  Sched_context *&current { SC_Scheduler::current.current() };
+  if (current)
+  {
+    Signed64 left = tt->get_timeout(clock);
+    if (left > 0)
+      current->set_left(left);
+    else
+      current->replenish();
+  }
+
+  // Make sc current.
+  current = sc;
 }
 
 IMPLEMENT static
@@ -89,10 +105,10 @@ SC_Scheduler::schedule(bool blocked)
   Ready_queue &rq { SC_Scheduler::rq.current() };
 
   assert(current);
-  assert(blocked || !current->in_ready_list());
+  assert(blocked || !current->in_ready_queue());
 
   // TOMO: why do we need left anyway?
-  current->replenish();
+  //current->replenish();
 
   if (EXPECT_TRUE (!blocked))
     rq.enqueue(current);
@@ -100,9 +116,9 @@ SC_Scheduler::schedule(bool blocked)
 
   //for (;;)
   //{
-  printf("we schedule now... (RQ has %d entries.)\n", rq.c);
+  //printf("we schedule now... (RQ has %d entries.)\n", rq.c);
   old = current;
-  next = rq.dequeue();
+  next = rq.next();
   set_current(next);
   // TOMO: ugly :(
   // don't use current from here on.
@@ -118,6 +134,7 @@ void
 SC_Scheduler::Ready_queue::enqueue(Sched_context *sc)
 {
   assert(cpu_lock.test());
+  assert(sc);
   assert(sc->prio() < priorities);
 
   if (EXPECT_FALSE (Queue::in_list(sc)))
@@ -130,16 +147,16 @@ SC_Scheduler::Ready_queue::enqueue(Sched_context *sc)
   c++;
 }
 
-IMPLEMENT inline NEEDS ["cpu_lock.h", <cassert>, "std_macros.h"]
-Sched_context *
-SC_Scheduler::Ready_queue::dequeue()
+IMPLEMENT
+void
+SC_Scheduler::Ready_queue::dequeue(Sched_context *sc)
 {
   assert(cpu_lock.test());
-
-  Sched_context *const sc { queue[prio_highest].front() };
-
   assert(sc);
   assert(sc->prio() < priorities);
+
+  if (EXPECT_FALSE (!Queue::in_list(sc)))
+    return;
 
   queue[sc->prio()].remove(sc);
 
@@ -147,5 +164,19 @@ SC_Scheduler::Ready_queue::dequeue()
     prio_highest--;
 
   c--;
+}
+
+IMPLEMENT
+Sched_context *
+SC_Scheduler::Ready_queue::next()
+{
+  assert(cpu_lock.test());
+
+  // TOMO: possible optimisation here.
+  // (avoid double access to queue)
+  Sched_context *const sc { queue[prio_highest].front() };
+  dequeue(sc);
+
   return sc;
 }
+

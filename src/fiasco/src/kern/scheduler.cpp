@@ -36,7 +36,6 @@ IMPLEMENTATION:
 #include "entry_frame.h"
 #include "sc_scheduler.h"
 
-
 JDB_DEFINE_TYPENAME(Scheduler, "\033[34mSched\033[m");
 Scheduler Scheduler::scheduler;
 
@@ -107,7 +106,6 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
            cxx::int_value<Cpu_number>(sched_param->cpus.offset()),
            cxx::int_value<Order>(sched_param->cpus.granularity()));
 
-  //thread->migrate(&info);
   // TOMO: ugly :(
   // this is because with the legacy interface, "schedule thread" is also used to set sched parameters.
   // with new interface, userspace should interact with sched_context cap directly.
@@ -118,12 +116,16 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
     printf("creating a new one...\n");
     // TOMO: set prio directly from sched_param.
     thread->alloc_sched_context(Config::Default_prio);
-    SC_Scheduler::deblock(thread->sched());
+    // TOMO: in which ready_queue to put here?
+    // maybe this is important for MP implementation.
+    //SC_Scheduler::deblock(thread->sched());
   }
 
-  thread->sched()->set(sched_param);
-  if (thread != current())
-    SC_Scheduler::schedule(false);
+  thread->migrate(&info);
+
+  //thread->sched()->set(sched_param);
+  //if (thread != current())
+  //  SC_Scheduler::schedule(false);
 
   return commit_result(0);
 }

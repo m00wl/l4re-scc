@@ -405,9 +405,9 @@ void Thread::goto_sleep(L4_timeout const &t, Sender *sender, Utcb *utcb)
   //if (sender == this)
   //  switch_sched(sched(), &Sched_context::rq.current());
 
-  printf("going to sleep because IPC partner is not ready yet.\n");
+  //printf("going to sleep because IPC partner is not ready yet.\n");
   SC_Scheduler::schedule(true);
-  printf("waking up because IPC partner unblocked me.\n");
+  //printf("waking up because IPC partner unblocked me.\n");
 
   reset_timeout();
 
@@ -606,7 +606,7 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
             partner->reset_timeout();
 
           ok = transfer_msg(tag, partner, rights, result.is_open_wait());
-          printf("transfering IPC message...\n");
+          //printf("transfering IPC message...\n");
 
           // transfer is also a possible migration point
           current_cpu = ::current_cpu();
@@ -660,10 +660,10 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
   //  }
   if (deblock_partner)
   {
-    printf("i am unblocking my IPC partner\n");
+    //printf("i am unblocking my IPC partner\n");
     partner->xcpu_state_change(~Thread_ipc_transfer, Thread_ready);
     assert(partner->sched());
-    printf("partners sched context: addr=%p prio=%d\n", partner->sched(), partner->sched()->prio());
+    //printf("partners sched context: addr=%p prio=%d\n", partner->sched(), partner->sched()->prio());
     SC_Scheduler::deblock(partner->sched());
   }
 

@@ -1056,7 +1056,7 @@ Context::switch_exec_locked(Context *t, enum Helping_mode mode = Not_Helping)
   //assert (current() != t);
   if (current() == t)
   {
-    printf("thread scheduled to itself.\n");
+    //printf("thread scheduled to itself.\n");
     LOG_CONTEXT_SWITCH;
     CNT_CONTEXT_SWITCH;
     return switch_handle_drq();
@@ -1626,7 +1626,7 @@ Context::enqueue_drq(Drq *rq)
 
   bool do_sched = _drq_q.execute_request(rq, Drq_q::No_drop, true);
   if (   access_once(&_home_cpu) == current_cpu()
-      && (state() & Thread_ready_mask) && !in_ready_list())
+      && (state() & Thread_ready_mask) && !sched()->in_ready_queue())
     {
       //Sched_context::rq.current().ready_enqueue(sched());
       //return true;

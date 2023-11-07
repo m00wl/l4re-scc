@@ -427,7 +427,7 @@ Thread::handle_timer_interrupt()
   //if ((Timeout_q::timeout_queue.cpu(_cpu).do_timeouts() || resched)
   //    && !Sched_context::rq.current().schedule_in_progress)
     {
-      printf("reschedule after timer interrupt\n");
+      //printf("reschedule after timer interrupt\n");
       SC_Scheduler::schedule(false);
       assert (timeslice_timeout.cpu(current_cpu())->is_set());	// Coma check
     }
@@ -633,19 +633,21 @@ PUBLIC
 void
 Thread::set_sched_params(L4_sched_param const *p)
 {
-  (void)p;
-  panic("Thread::set_sched_params: sc not available here\n");
-  //Sched_context *sc = sched_context();
+  //(void)p;
+  //panic("Thread::set_sched_params: sc not available here\n");
+  Sched_context *sc = this->sched();
 
-  //// this can actually access the ready queue of a CPU that is offline remotely
+  // this can actually access the ready queue of a CPU that is offline remotely
   //Sched_context::Ready_queue &rq = Sched_context::rq.cpu(home_cpu());
-  //rq.ready_dequeue(sched());
+  SC_Scheduler::Ready_queue &rq { SC_Scheduler::rq.cpu(home_cpu()) };
+  rq.dequeue(sc);
 
-  //sc->set(p);
-  //sc->replenish();
+  sc->set(p);
+  sc->replenish();
 
-  //if (sc == rq.current_sched())
-  //  rq.set_current_sched(sc);
+  if (sc == SC_Scheduler::get_current())
+    SC_Scheduler::set_current(sc);
+    //rq.set_current_sched(sc);
 
   //if (state() & Thread_ready_mask) // maybe we could ommit enqueueing current
   //  rq.ready_enqueue(sched());
@@ -736,10 +738,17 @@ Thread::start_migration()
   assert (!((Mword)m & 0x3)); // ensure alignment
 
   if (!m || !mp_cas(&_migration, m, (Migration*)0))
+    // TOMO: migration was already started/done by someone else.
     return reinterpret_cast<Migration*>(0x2); // bit one == 0 --> no need to reschedule
 
   if (m->cpu == home_cpu())
     {
+      // TOMO: applications also use "run_thread" to just change their scheduling params.
+      // in this case, migration src_cpu == target_cpu.
+      // this is this case.
+      // we can do this for ourselves (like sigma0 does during startup)
+      // or for someone else (like moe does during application launch)
+      // in !MP we know, that we are all on the same cpu.
       set_sched_params(m->sp);
       Mem::mp_mb();
       write_now(&m->in_progress, true);
@@ -755,18 +764,23 @@ Thread::do_migration()
 {
   Migration *inf = start_migration();
 
-  if ((Mword)inf & 3)
+  if ((Mword)inf & 0x3)
+  {
+    //printf("already migrated, nothing to do.\n");
     return (Mword)inf & 1; // already migrated, nothing to do
+  }
 
   spill_fpu_if_owner();
 
   if (current() == this)
     {
+      //printf("idle thread helps me to migrate\n");
       assert (current_cpu() == home_cpu());
       return kernel_context_drq(handle_migration_helper, inf);
     }
   else
     {
+      //printf("I help other thread to migrate\n");
       Cpu_number target_cpu = access_once(&inf->cpu);
       bool resched = migrate_away(inf, false);
       resched |= migrate_to(target_cpu, false);
@@ -987,69 +1001,71 @@ PRIVATE inline
 bool
 Thread::migrate_away(Migration *inf, bool remote)
 {
-  (void)inf;
-  (void)remote;
-  panic("Thread::migrate_away: sc not available here\n");
-  //assert (current() != this);
-  //assert (cpu_lock.test());
-  //bool resched = false;
+  //(void)inf;
+  //(void)remote;
+  //panic("Thread::migrate_away: sc not available here\n");
+  assert (current() != this);
+  assert (cpu_lock.test());
+  bool resched = false;
 
-  //Cpu_number cpu = inf->cpu;
-  ////  LOG_MSG_3VAL(this, "MGi ", Mword(current()), (current_cpu() << 16) | cpu(), Context::current_sched());
-  //if (_timeout)
-  //  _timeout->reset();
+  Cpu_number cpu = inf->cpu;
+  //  LOG_MSG_3VAL(this, "MGi ", Mword(current()), (current_cpu() << 16) | cpu(), Context::current_sched());
+  if (_timeout)
+    _timeout->reset();
 
-  //if (!remote && home_cpu() == current_cpu())
-  //  {
-  //    auto &rq = Sched_context::rq.current();
+  if (!remote && home_cpu() == current_cpu())
+    {
+      //auto &rq = Sched_context::rq.current();
+      SC_Scheduler::Ready_queue &rq = SC_Scheduler::rq.current();
 
-  //    // if we are in the middle of the scheduler, leave it now
-  //    if (rq.schedule_in_progress == this)
-  //      rq.schedule_in_progress = 0;
+      // if we are in the middle of the scheduler, leave it now
+      //if (rq.schedule_in_progress == this)
+      //  rq.schedule_in_progress = 0;
 
-  //    rq.ready_dequeue(sched());
+      rq.dequeue(this->sched());
 
-  //      {
-  //        // Not sure if this can ever happen
-  //        Sched_context *csc = rq.current_sched();
-  //        if (csc == sched())
-  //          {
-  //            rq.set_current_sched(kernel_context(current_cpu())->sched());
-  //            resched = true;
-  //          }
-  //      }
-  //  }
+        //{
+        //  // Not sure if this can ever happen
+        //  Sched_context *csc = rq.current_sched();
+        //  if (csc == sched())
+        //    {
+        //      rq.set_current_sched(kernel_context(current_cpu())->sched());
+        //      resched = true;
+        //    }
+        //}
+    }
 
   //Sched_context *sc = sched_context();
-  //sc->set(inf->sp);
-  //sc->replenish();
+  Sched_context *sc = sched();
+  sc->set(inf->sp);
+  sc->replenish();
   //set_sched(sc);
 
-  //state_add_dirty(Thread_finish_migration);
-  //set_home_cpu(cpu);
-  //write_now(&inf->in_progress, true);
-  //return resched;
+  state_add_dirty(Thread_finish_migration);
+  set_home_cpu(cpu);
+  write_now(&inf->in_progress, true);
+  return resched;
 }
 
 PRIVATE inline
 bool
 Thread::migrate_to(Cpu_number target_cpu, bool)
 {
-  (void)target_cpu;
-  panic("Thread::migrate_to: sc not available here\n");
-  //if (!Cpu::online(target_cpu))
-  //  {
-  //    handle_drq();
-  //    return false;
-  //  }
+  //(void)target_cpu;
+  //panic("Thread::migrate_to: sc not available here\n");
+  if (!Cpu::online(target_cpu))
+    {
+      handle_drq();
+      return false;
+    }
 
-  //bool resched = false;
+  bool resched = false;
   //if (state() & Thread_ready_mask)
   //  resched = Sched_context::rq.current().deblock(sched(), current()->sched());
 
-  //enqueue_timeout_again();
+  enqueue_timeout_again();
 
-  //return resched;
+  return resched;
 }
 
 PUBLIC
@@ -1058,6 +1074,7 @@ Thread::migrate(Migration *info)
 {
   assert (cpu_lock.test());
 
+  //printf("Thread migration: src_cpu:%u, target_cpu:%u\n", cxx::int_value<Cpu_number>(home_cpu()), cxx::int_value<Cpu_number>(info->cpu));
   LOG_TRACE("Thread migration", "mig", this, Migration_log,
       l->state = state(false);
       l->src_cpu = home_cpu();
@@ -1066,7 +1083,9 @@ Thread::migrate(Migration *info)
   );
 
   _migration = info;
-  current()->schedule_if(do_migration());
+  if (do_migration())
+    SC_Scheduler::schedule(false);
+  //current()->schedule_if(do_migration());
 }
 
 PRIVATE inline NOEXPORT

@@ -215,7 +215,7 @@ PUBLIC
 void
 Sched_context::set(L4_sched_param const *_p)
 {
-  printf("changing parameters of this sched_context\n");
+  //printf("changing parameters of this sched_context\n");
   Sp const *p = reinterpret_cast<Sp const *>(_p);
   if (_p->is_legacy())
   {
@@ -273,13 +273,9 @@ Sched_context::set_left(Unsigned64 left)
   _left = left;
 }
 
-/**
- * Check if Context is in ready-list.
- * @return 1 if thread is in ready-list, 0 otherwise
- */
 PUBLIC inline
 Mword
-Sched_context::in_ready_list() const
+Sched_context::in_ready_queue() const
 {
   return cxx::Sd_list<Sched_context>::in_list(this);
 }

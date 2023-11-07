@@ -84,12 +84,14 @@ Kernel_thread::bootstrap()
 
   Timer::init_system_clock();
   //Sched_context::rq.current().set_idle(this->sched());
+  //Ready_queue::rq.current().set_idle(this->sched());
 
   Kernel_task::kernel_task()->make_current();
 
   // Setup initial timeslice
   //Sched_context::rq.current().set_current_sched(sched());
   SC_Scheduler::set_current(Sched_context::get_kernel_sc());
+  //Ready_queue::rq.current().set_current_sched(this->sched());
 
   Timer_tick::setup(current_cpu());
   assert (current_cpu() == Cpu_number::boot_cpu()); // currently the boot cpu must be 0
@@ -183,7 +185,7 @@ PUBLIC inline NEEDS["processor.h"]
 void
 Kernel_thread::idle_op()
 {
-  printf("hello from idle.\n");
+  //printf("hello from idle.\n");
   if (Config::hlt_works_ok)
     Proc::halt();			// stop the CPU, waiting for an int
   else
