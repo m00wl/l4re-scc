@@ -109,7 +109,7 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
   // TOMO: ugly :(
   // this is because with the legacy interface, "schedule thread" is also used to set sched parameters.
   // with new interface, userspace should interact with sched_context cap directly.
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> scheduler was called!\n");
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> run_thread() was called!\n");
   if (!thread->sched())
   {
     if (M_SCHEDULER_DEBUG)
@@ -117,7 +117,7 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
       printf("SCHEDULER> try to run thread %p\n", &thread);
       printf("SCHEDULER> but it that has no sched_context attached.\n");
       printf("SCHEDULER> creating a new one...\n");
-      printf("SCHEDULER> RQ has %d entries.\n", SC_Scheduler::rq.current().c);
+      //printf("SCHEDULER> RQ has %d entries.\n", SC_Scheduler::rq.current().c);
     }
     // TOMO: set prio directly from sched_param.
     thread->alloc_sched_context(Config::Default_prio);

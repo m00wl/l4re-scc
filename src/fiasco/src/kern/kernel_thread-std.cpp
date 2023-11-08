@@ -75,7 +75,7 @@ Kernel_thread::init_workload()
   sigma0_sc->inc_ref();
   sigma0_sc->set_context(sigma0_thread);
   check(map(sigma0_sc, sigma0, sigma0, C_sched_context, 0));
-  SC_Scheduler::deblock(sigma0_sc);
+  //SC_Scheduler::deblock(sigma0_sc);
   sigma0_thread->set_sched(sigma0_sc);
 
   //
@@ -111,7 +111,7 @@ Kernel_thread::init_workload()
   boot_sc->inc_ref();
   boot_sc->set_context(boot_thread);
   check(map(boot_sc,   boot_task, boot_task, C_sched_context, 0));
-  SC_Scheduler::deblock(boot_sc);
+  //SC_Scheduler::deblock(boot_sc);
   boot_thread->set_sched(boot_sc);
 
   Ipc_gate *s0_b_gate = Ipc_gate::create(Ram_quota::root, sigma0_thread, 4 << 4);

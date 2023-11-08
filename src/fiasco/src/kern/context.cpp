@@ -26,6 +26,7 @@ class Context;
 class Kobject_iface;
 
 class Sched_context;
+class Ready_queue;
 
 class Context_ptr
 {
@@ -444,6 +445,7 @@ IMPLEMENTATION:
 #include "timeout.h"
 #include "sched_context.h"
 #include "sc_scheduler.h"
+#include "ready_queue.h"
 
 DEFINE_PER_CPU Per_cpu<Clock> Context::_clock(Per_cpu_data::Cpu_num);
 DEFINE_PER_CPU Per_cpu<Context *> Context::_kernel_ctxt;
@@ -706,10 +708,10 @@ Context::lock_cnt() const
   return _lock_cnt;
 }
 
-///**
-// * Switch active timeslice of this Context.
-// * @param next Sched_context to switch to
-// */
+/**
+ * Switch active timeslice of this Context.
+ * @param next Sched_context to switch to
+ */
 //PUBLIC
 //void
 //Context::switch_sched(Sched_context *next, Sched_context::Ready_queue *queue)
@@ -717,6 +719,14 @@ Context::lock_cnt() const
 //  queue->switch_sched(sched(), next);
 //  set_sched(next);
 //}
+PUBLIC
+void
+Context::switch_sched(Sched_context *next, Ready_queue *queue)
+{
+  queue->switch_sched(sched(), next);
+  set_sched(next);
+}
+
 
 /**
  * Select a different context for running and activate it.
@@ -725,102 +735,109 @@ PUBLIC
 void
 Context::schedule()
 {
-  printf("%p\n", __builtin_return_address(0));
-  auto current = SC_Scheduler::get_current();
-  auto prio = current->prio();
-  (void)prio;
+  //printf("%p\n", __builtin_return_address(0));
+  //auto current = SC_Scheduler::get_current();
+  //auto prio = current->prio();
+  //auto &rq = Ready_queue::rq.current();
+  //(void)prio;
+  //(void)rq;
 
-  panic("c: schedule not available\n");
-  //auto guard = lock_guard(cpu_lock);
+  //panic("c: schedule not available\n");
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> we schedule now [RQ has %d entries]\n", Ready_queue::rq.current().c);
+  auto guard = lock_guard(cpu_lock);
   //assert (!Sched_context::rq.current().schedule_in_progress);
+  assert (!Ready_queue::rq.current().schedule_in_progress);
 
-  //// we give up the CPU as a helpee, so we have no helper anymore
-  //if (EXPECT_FALSE(helper() != this))
-  //  set_helper(Not_Helping);
+  // we give up the CPU as a helpee, so we have no helper anymore
+  if (EXPECT_FALSE(helper() != this))
+    set_helper(Not_Helping);
 
-  //// if we are a thread on a foreign CPU we must ask the kernel context to
-  //// schedule for us
-  //Cpu_number current_cpu = ::current_cpu();
-  //while (EXPECT_FALSE(current_cpu != access_once(&_home_cpu)))
-  //  {
-  //    Context *kc = Context::kernel_context(current_cpu);
-  //    assert (this != kc);
+  // if we are a thread on a foreign CPU we must ask the kernel context to
+  // schedule for us
+  Cpu_number current_cpu = ::current_cpu();
+  while (EXPECT_FALSE(current_cpu != access_once(&_home_cpu)))
+    {
+      Context *kc = Context::kernel_context(current_cpu);
+      assert (this != kc);
 
-  //    // flag that we need to schedule
-  //    kc->state_add_dirty(Thread_need_resched);
-  //    switch (switch_exec_locked(kc, Ignore_Helping))
-  //      {
-  //      case Switch::Ok:
-  //        return;
-  //      case Switch::Resched:
-  //        current_cpu = ::current_cpu();
-  //        continue;
-  //      case Switch::Failed:
-  //        assert (false);
-  //        continue;
-  //      }
-  //  }
+      // flag that we need to schedule
+      kc->state_add_dirty(Thread_need_resched);
+      switch (switch_exec_locked(kc, Ignore_Helping))
+        {
+        case Switch::Ok:
+          return;
+        case Switch::Resched:
+          current_cpu = ::current_cpu();
+          continue;
+        case Switch::Failed:
+          assert (false);
+          continue;
+        }
+    }
 
-  //// now, we are sure that a thread on its home CPU calls schedule.
-  //CNT_SCHEDULE;
+  // now, we are sure that a thread on its home CPU calls schedule.
+  CNT_SCHEDULE;
 
-  //// Ensure only the current thread calls schedule
-  //assert (this == current());
+  // Ensure only the current thread calls schedule
+  assert (this == current());
 
   //Sched_context::Ready_queue *rq = &Sched_context::rq.current();
+  Ready_queue *rq = &Ready_queue::rq.current();
 
-  //// Enqueue current thread into ready-list to schedule correctly
-  //update_ready_list();
+  // Enqueue current thread into ready-list to schedule correctly
+  update_ready_list();
 
-  //// Select a thread for scheduling.
-  //Context *next_to_run;
+  // Select a thread for scheduling.
+  Context *next_to_run;
 
-  //for (;;)
-  //  {
-  //    next_to_run = rq->next_to_run()->context();
+  for (;;)
+    {
+      next_to_run = rq->next_to_run()->context();
 
-  //    // Ensure ready-list sanity
-  //    assert (next_to_run);
+      // Ensure ready-list sanity
+      assert (next_to_run);
 
-  //    if (EXPECT_FALSE(!(next_to_run->state() & Thread_ready_mask)))
-  //      rq->ready_dequeue(next_to_run->sched());
-  //    else switch (schedule_switch_to_locked(next_to_run))
-  //      {
-  //      default:
-  //      case Switch::Ok:      return;   // ok worked well
-  //      case Switch::Failed:  break;    // not migrated, need preemption point
-  //      case Switch::Resched:
-  //        {
-  //          Cpu_number n = ::current_cpu();
-  //          if (n != current_cpu)
-  //            {
-  //              current_cpu = n;
-  //              rq = &Sched_context::rq.current();
-  //            }
-  //        }
-  //        continue; // may have been migrated...
-  //      }
+      if (EXPECT_FALSE(!(next_to_run->state() & Thread_ready_mask)))
+        rq->ready_dequeue(next_to_run->sched());
+      else switch (schedule_switch_to_locked(next_to_run))
+        {
+        default:
+        case Switch::Ok:      return;   // ok worked well
+        case Switch::Failed:  break;    // not migrated, need preemption point
+        case Switch::Resched:
+          {
+            Cpu_number n = ::current_cpu();
+            if (n != current_cpu)
+              {
+                current_cpu = n;
+                //rq = &Sched_context::rq.current();
+                rq = &Ready_queue::rq.current();
+              }
+          }
+          continue; // may have been migrated...
+        }
 
-  //    rq->schedule_in_progress = this;
-  //    Proc::preemption_point();
-  //    if (EXPECT_TRUE(current_cpu == ::current_cpu()))
-  //      rq->schedule_in_progress = 0;
-  //    else
-  //      return; // we got migrated and selected on our new CPU, so we may run
-  //  }
+      rq->schedule_in_progress = this;
+      Proc::preemption_point();
+      if (EXPECT_TRUE(current_cpu == ::current_cpu()))
+        rq->schedule_in_progress = 0;
+      else
+        return; // we got migrated and selected on our new CPU, so we may run
+    }
 }
 
 
-PUBLIC inline
+PUBLIC //inline
 void
 Context::schedule_if(bool s)
 {
-  (void)s;
-  panic("c: schedule_if not available\n");
+  //(void)s;
+  //panic("c: schedule_if not available\n");
   //if (!s || Sched_context::rq.current().schedule_in_progress)
-  //  return;
+  if (!s || Ready_queue::rq.current().schedule_in_progress)
+    return;
 
-  //schedule();
+  schedule();
 }
 
 ///**
@@ -870,11 +887,12 @@ PRIVATE inline
 void
 Context::update_ready_list()
 {
-  panic("c: update_ready_list not available\n");
-  //assert (this == current());
+  //panic("c: update_ready_list not available\n");
+  assert (this == current());
 
-  //if ((state() & Thread_ready_mask) && sched()->left())
-  //  Sched_context::rq.current().ready_enqueue(sched());
+  if ((state() & Thread_ready_mask) && sched()->left())
+    //Sched_context::rq.current().ready_enqueue(sched());
+    Ready_queue::rq.current().ready_enqueue(sched());
 }
 
 /**
@@ -990,24 +1008,25 @@ Context::consumed_time()
  * @param t Destination thread whose scheduling context and execution context
  *          should be activated.
  */
-PROTECTED inline NEEDS ["assert.h", Context::switch_handle_drq]
+PROTECTED //inline NEEDS ["assert.h", Context::switch_handle_drq]
 Context::Switch FIASCO_WARN_RESULT
 Context::schedule_switch_to_locked(Context *t)
 {
-  (void)t;
-  panic("c: schedule_switch_to_locked not available\n");
-  // // Must be called with CPU lock held
-  //assert (cpu_lock.test());
+  //(void)t;
+  //panic("c: schedule_switch_to_locked not available\n");
+  // Must be called with CPU lock held
+  assert (cpu_lock.test());
 
   //Sched_context::Ready_queue &rq = Sched_context::rq.current();
-  //// Switch to destination thread's scheduling context
-  //if (rq.current_sched() != t->sched())
-  //  rq.set_current_sched(t->sched());
+  Ready_queue &rq { Ready_queue::rq.current() };
+  // Switch to destination thread's scheduling context
+  if (rq.current_sched() != t->sched())
+    rq.set_current_sched(t->sched());
 
-  //if (EXPECT_FALSE(t == this))
-  //  return switch_handle_drq();
+  if (EXPECT_FALSE(t == this))
+    return switch_handle_drq();
 
-  //return switch_exec_locked(t, Not_Helping);
+  return switch_exec_locked(t, Not_Helping);
 }
 
 PUBLIC inline NEEDS [Context::schedule_switch_to_locked]
@@ -1096,8 +1115,8 @@ Context::switch_exec_locked(Context *t, enum Helping_mode mode = Not_Helping)
 
   t->set_helper(mode);
 
-  //if (EXPECT_TRUE(get_current_cpu() == home_cpu()))
-  //  update_ready_list();
+  if (EXPECT_TRUE(get_current_cpu() == home_cpu()))
+    update_ready_list();
 
   t->set_current_cpu(get_current_cpu());
   switch_fpu(t);
@@ -1399,7 +1418,7 @@ Context::set_home_cpu(Cpu_number cpu)
  * This function must be used to change the state of contexts that are
  * potentially running on a different CPU.
  */
-PUBLIC inline NEEDS[Context::pending_rqq_enqueue, "thread_state.h"]
+PUBLIC //inline NEEDS[Context::pending_rqq_enqueue, "thread_state.h"]
 bool
 Context::xcpu_state_change(Mword mask, Mword add, bool lazy_q = false)
 {
@@ -1420,8 +1439,9 @@ Context::xcpu_state_change(Mword mask, Mword add, bool lazy_q = false)
     }
 
   state_change_dirty(mask, add);
-  //if (add & Thread_ready_mask)
-  //  return Sched_context::rq.current().deblock(sched(), current()->sched(), lazy_q);
+  if (add & Thread_ready_mask)
+    //return Sched_context::rq.current().deblock(sched(), current()->sched(), lazy_q);
+    return Ready_queue::rq.current().deblock(sched(), current()->sched(), lazy_q);
   return false;
 }
 
@@ -1631,9 +1651,10 @@ Context::enqueue_drq(Drq *rq)
       && (state() & Thread_ready_mask) && !sched()->in_ready_queue())
     {
       //Sched_context::rq.current().ready_enqueue(sched());
-      //return true;
-      SC_Scheduler::deblock(this->sched());
+      Ready_queue::rq.current().ready_enqueue(sched());
       return true;
+      //SC_Scheduler::deblock(this->sched());
+      //return true;
     }
   return do_sched;
 }

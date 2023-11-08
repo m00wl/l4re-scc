@@ -38,6 +38,7 @@ IMPLEMENTATION:
 #include "lock_guard.h"
 #include "mem.h"
 #include "sc_scheduler.h"
+#include "ready_queue.h"
 
 //
 // state requests/manipulation
@@ -104,7 +105,8 @@ Sender::cast(Prio_list_elem *e)
 PUBLIC
 void Sender::sender_enqueue(Prio_list *head, Unsigned8 prio)
 {
-  assert(prio < SC_Scheduler::priorities);
+  //assert(prio < SC_Scheduler::priorities);
+  assert(prio < Ready_queue::priorities);
 
   auto guard = lock_guard(cpu_lock);
   head->insert(this, prio);

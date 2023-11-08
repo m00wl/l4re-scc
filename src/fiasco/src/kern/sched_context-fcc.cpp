@@ -29,6 +29,7 @@ class Sched_context
 
   //template<typename T>
   //friend struct Jdb_thread_list_policy;
+  friend class Ready_queue;
 
   union Sp
   {
@@ -215,7 +216,7 @@ PUBLIC
 void
 Sched_context::set(L4_sched_param const *_p)
 {
-  //printf("changing parameters of this sched_context\n");
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> changing parameters of this sched_context: %p\n", this);
   Sp const *p = reinterpret_cast<Sp const *>(_p);
   if (_p->is_legacy())
   {

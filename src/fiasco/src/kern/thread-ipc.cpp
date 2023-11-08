@@ -147,7 +147,9 @@ IMPLEMENTATION:
 #include "processor.h"
 #include "timer.h"
 #include "warn.h"
+#include "context.h"
 #include "sc_scheduler.h"
+#include "ready_queue.h"
 
 PUBLIC
 void
@@ -342,8 +344,8 @@ Thread::check_sender(Thread *sender, bool timeout)
   // idea: do_ipc (with partner) is always initiated from the sender
   // means: we always run with the sender's sched context.
   // means: we can take prio and stuff from SC_Scheduler::get_current.
-  //sender->sender_enqueue(sender_list(), sender->sched()->prio());
-  sender->sender_enqueue(sender_list(), SC_Scheduler::get_current()->prio());
+  sender->sender_enqueue(sender_list(), sender->sched()->prio());
+  //sender->sender_enqueue(sender_list(), SC_Scheduler::get_current()->prio());
   vcpu_set_irq_pending();
   return Check_sender::Queued;
 }
@@ -389,7 +391,7 @@ PRIVATE inline NEEDS["timer.h"]
 void Thread::goto_sleep(L4_timeout const &t, Sender *sender, Utcb *utcb)
 {
   //(void)t;
-  (void)sender;
+  //(void)sender;
   //(void)utcb;
   //panic("Thread::goto_sleep: sc not available here\n");
 
@@ -402,11 +404,13 @@ void Thread::goto_sleep(L4_timeout const &t, Sender *sender, Utcb *utcb)
   state_del_dirty(Thread_ready);
   setup_timer(t, utcb, &timeout);
 
-  //if (sender == this)
-  //  switch_sched(sched(), &Sched_context::rq.current());
+  if (sender == this)
+    //switch_sched(sched(), &Sched_context::rq.current());
+    switch_sched(sched(), &Ready_queue::rq.current());
 
   if (M_IPC_DEBUG) printf("IPC> thread %p: going to sleep because IPC partner is not ready.\n", this);
-  SC_Scheduler::schedule(true);
+  //SC_Scheduler::schedule(true);
+  schedule();
   if (M_IPC_DEBUG) printf("IPC> thread %p: waking up because IPC partner unblocked me.\n", this);
 
   reset_timeout();
@@ -473,7 +477,7 @@ Thread::get_next_sender(Sender *sender)
   return 0;
 }
 
-PRIVATE inline
+PRIVATE inline NEEDS ["context.h", "ready_queue.h"]
 bool
 Thread::activate_ipc_partner(Thread *partner, Cpu_number current_cpu,
                              bool do_switch, bool closed_wait)
@@ -484,23 +488,25 @@ Thread::activate_ipc_partner(Thread *partner, Cpu_number current_cpu,
   (void)closed_wait;
   panic("Thread::activate_ipc_partner: sc not available here\n");
   //if (partner->home_cpu() == current_cpu)
-  //  {
-  //    //auto &rq = Sched_context::rq.current();
-  //    //Sched_context *cs = rq.current_sched();
-  //    Sched_context *cs = SC_Scheduler::get_current();
-  //    do_switch = do_switch && (closed_wait || cs != sched());
-  //    partner->state_change_dirty(~Thread_ipc_transfer, Thread_ready);
-  //    if (do_switch)
-  //      {
-  //        //schedule_if(switch_exec_locked(partner, Not_Helping) != Switch::Ok);
-  //        if (switch_exec_locked(partner, Not_Helping) != Switch::Ok) {
-  //          SC_Scheduler::schedule(false);
-  //        }
-  //        return true;
+  //{
+  //  //auto &rq = Sched_context::rq.current();
+  //  //Sched_context *cs = rq.current_sched();
+  //  //Sched_context *cs = SC_Scheduler::get_current();
+  //  Ready_queue &rq { Ready_queue::rq.current() };
+  //  Sched_context *cs = rq.current_sched();
+  //  do_switch = do_switch && (closed_wait || cs != sched());
+  //  partner->state_change_dirty(~Thread_ipc_transfer, Thread_ready);
+  //  if (do_switch)
+  //    {
+  //      schedule_if(switch_exec_locked(partner, Not_Helping) != Switch::Ok);
+  //      //if (switch_exec_locked(partner, Not_Helping) != Switch::Ok) {
+  //      //  SC_Scheduler::schedule(false);
   //      }
-  //    else
-  //      return deblock_and_schedule(partner);
-  //  }
+  //      return true;
+  //    }
+  //  else
+  //    return deblock_and_schedule(partner);
+  //}
 
   //partner->xcpu_state_change(~Thread_ipc_transfer, Thread_ready);
   //return false;
@@ -545,8 +551,8 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
   assert (!(state() & Thread_ipc_mask));
 
   prepare_receive(sender, have_receive ? regs : 0);
-  //bool activate_partner = false;
-  bool deblock_partner = false;
+  bool activate_partner = false;
+  //bool deblock_partner = false;
   Cpu_number current_cpu = ::current_cpu();
 
   if (partner)
@@ -618,9 +624,9 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
 
           // TOMO: activate partner is an optimization.
           // we turn that off for now...
-          //activate_partner = partner != this;
+          activate_partner = partner != this;
           // TOMO: however, we need to deblock the partner:
-          deblock_partner = partner != this;
+          //deblock_partner = partner != this;
           break;
         }
 
@@ -649,23 +655,23 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
       next = get_next_sender(sender);
     }
 
-  //if (activate_partner
-  //    && activate_ipc_partner(partner, current_cpu, do_switch && !next,
-  //                            have_receive && sender))
-  //  {
-  //    // blocked so might have a new sender queued
-  //    have_receive = state() & Thread_receive_wait;
-  //    if (have_receive && !next)
-  //      next = get_next_sender(sender);
-  //  }
-  if (deblock_partner)
-  {
-    //printf("i am unblocking my IPC partner\n");
-    partner->xcpu_state_change(~Thread_ipc_transfer, Thread_ready);
-    assert(partner->sched());
-    //printf("partners sched context: addr=%p prio=%d\n", partner->sched(), partner->sched()->prio());
-    SC_Scheduler::deblock(partner->sched());
-  }
+  if (activate_partner
+      && activate_ipc_partner(partner, current_cpu, do_switch && !next,
+                              have_receive && sender))
+    {
+      // blocked so might have a new sender queued
+      have_receive = state() & Thread_receive_wait;
+      if (have_receive && !next)
+        next = get_next_sender(sender);
+    }
+  //if (deblock_partner)
+  //{
+  //  //printf("i am unblocking my IPC partner\n");
+  //  partner->xcpu_state_change(~Thread_ipc_transfer, Thread_ready);
+  //  assert(partner->sched());
+  //  //printf("partners sched context: addr=%p prio=%d\n", partner->sched(), partner->sched()->prio());
+  //  SC_Scheduler::deblock(partner->sched());
+  //}
 
   if (next)
     {
@@ -1206,7 +1212,7 @@ Thread::set_ipc_send_rights(L4_fpage::Rights c)
   _ipc_send_rights = c;
 }
 
-PRIVATE inline NOEXPORT
+PRIVATE //inline NOEXPORT
 bool
 Thread::remote_ipc_send(Ipc_remote_request *rq)
 {

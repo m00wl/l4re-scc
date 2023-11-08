@@ -14,6 +14,7 @@ IMPLEMENTATION:
 #include "sched_context.h"
 #include "std_macros.h"
 #include "sc_scheduler.h"
+#include "ready_queue.h"
 
 /* Initialize global valiable timeslice_timeout */
 DEFINE_PER_CPU Per_cpu<Timeout *> timeslice_timeout;
@@ -33,4 +34,17 @@ Timeslice_timeout::Timeslice_timeout(Cpu_number cpu)
 PRIVATE
 bool
 Timeslice_timeout::expired() override
-{ return true; }
+{
+  //Sched_context::Ready_queue &rq = Sched_context::rq.current();
+  Ready_queue &rq { Ready_queue::rq.current() };
+  Sched_context *sched = rq.current_sched();
+
+  if (sched)
+  {
+    sched->replenish();
+    rq.requeue(sched);
+    rq.invalidate_sched();
+  }
+
+  return true;
+}

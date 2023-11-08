@@ -191,6 +191,7 @@ IMPLEMENTATION:
 #include "thread_state.h"
 #include "timeout.h"
 #include "sc_scheduler.h"
+#include "ready_queue.h"
 
 JDB_DEFINE_TYPENAME(Thread,  "\033[32mThread\033[m");
 DEFINE_PER_CPU Per_cpu<unsigned long> Thread::nested_trap_recover;
@@ -409,7 +410,7 @@ Thread::continuation_test_and_restore()
 // state requests/manipulation
 //
 
-PUBLIC inline NEEDS ["config.h", "timeout.h", "sc_scheduler.h"]
+PUBLIC inline NEEDS ["config.h", "timeout.h", "sc_scheduler.h", "ready_queue.h"]
 void
 Thread::handle_timer_interrupt()
 {
@@ -422,15 +423,25 @@ Thread::handle_timer_interrupt()
 
   bool resched = Rcu::do_pending_work(_cpu);
 
+  //// Check if we need to reschedule due to timeouts or wakeups
+  //if (Timeout_q::timeout_queue.cpu(_cpu).do_timeouts() || resched)
+  ////if ((Timeout_q::timeout_queue.cpu(_cpu).do_timeouts() || resched)
+  ////    && !Sched_context::rq.current().schedule_in_progress)
+  //  {
+  //    if (M_TIMER_DEBUG) printf("TIMER> reschedule after timer interrupt\n");
+  //    SC_Scheduler::schedule(false);
+  //    assert (timeslice_timeout.cpu(current_cpu())->is_set());	// Coma check
+  //  }
+
   // Check if we need to reschedule due to timeouts or wakeups
-  if (Timeout_q::timeout_queue.cpu(_cpu).do_timeouts() || resched)
-  //if ((Timeout_q::timeout_queue.cpu(_cpu).do_timeouts() || resched)
-  //    && !Sched_context::rq.current().schedule_in_progress)
+  if ((Timeout_q::timeout_queue.cpu(_cpu).do_timeouts() || resched)
+      && !Ready_queue::rq.current().schedule_in_progress)
     {
       if (M_TIMER_DEBUG) printf("TIMER> reschedule after timer interrupt\n");
-      SC_Scheduler::schedule(false);
+      schedule();
       assert (timeslice_timeout.cpu(current_cpu())->is_set());	// Coma check
     }
+
 }
 
 
@@ -639,18 +650,20 @@ Thread::set_sched_params(L4_sched_param const *p)
 
   // this can actually access the ready queue of a CPU that is offline remotely
   //Sched_context::Ready_queue &rq = Sched_context::rq.cpu(home_cpu());
-  SC_Scheduler::Ready_queue &rq { SC_Scheduler::rq.cpu(home_cpu()) };
+  //SC_Scheduler::Ready_queue &rq { SC_Scheduler::rq.cpu(home_cpu()) };
+  Ready_queue &rq { Ready_queue::rq.cpu(home_cpu()) };
   rq.dequeue(sc);
 
   sc->set(p);
   sc->replenish();
 
-  if (sc == SC_Scheduler::get_current())
-    SC_Scheduler::set_current(sc);
-    //rq.set_current_sched(sc);
+  //if (sc == SC_Scheduler::get_current())
+  //  SC_Scheduler::set_current(sc);
+  if (sc == rq.current_sched())
+    rq.set_current_sched(sc);
 
-  //if (state() & Thread_ready_mask) // maybe we could ommit enqueueing current
-  //  rq.ready_enqueue(sched());
+  if (state() & Thread_ready_mask) // maybe we could ommit enqueueing current
+    rq.ready_enqueue(this->sched());
 }
 
 PUBLIC
@@ -1016,23 +1029,24 @@ Thread::migrate_away(Migration *inf, bool remote)
   if (!remote && home_cpu() == current_cpu())
     {
       //auto &rq = Sched_context::rq.current();
-      SC_Scheduler::Ready_queue &rq = SC_Scheduler::rq.current();
+      //SC_Scheduler::Ready_queue &rq { SC_Scheduler::rq.current() };
+      Ready_queue &rq { Ready_queue::rq.current() };
 
-      // if we are in the middle of the scheduler, leave it now
-      //if (rq.schedule_in_progress == this)
-      //  rq.schedule_in_progress = 0;
+      //if we are in the middle of the scheduler, leave it now
+      if (rq.schedule_in_progress == this)
+        rq.schedule_in_progress = 0;
 
       rq.dequeue(this->sched());
 
-        //{
-        //  // Not sure if this can ever happen
-        //  Sched_context *csc = rq.current_sched();
-        //  if (csc == sched())
-        //    {
-        //      rq.set_current_sched(kernel_context(current_cpu())->sched());
-        //      resched = true;
-        //    }
-        //}
+        {
+          // Not sure if this can ever happen
+          Sched_context *csc = rq.current_sched();
+          if (csc == sched())
+            {
+              rq.set_current_sched(kernel_context(current_cpu())->sched());
+              resched = true;
+            }
+        }
     }
 
   //Sched_context *sc = sched_context();
@@ -1060,8 +1074,8 @@ Thread::migrate_to(Cpu_number target_cpu, bool)
     }
 
   bool resched = false;
-  //if (state() & Thread_ready_mask)
-  //  resched = Sched_context::rq.current().deblock(sched(), current()->sched());
+  if (state() & Thread_ready_mask)
+    resched = Ready_queue::rq.current().deblock(sched(), current()->sched());
 
   enqueue_timeout_again();
 
@@ -1083,9 +1097,9 @@ Thread::migrate(Migration *info)
   );
 
   _migration = info;
-  if (do_migration())
-    SC_Scheduler::schedule(false);
-  //current()->schedule_if(do_migration());
+  //if (do_migration())
+  //  SC_Scheduler::schedule(false);
+  current()->schedule_if(do_migration());
 }
 
 PRIVATE inline NOEXPORT

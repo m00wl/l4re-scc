@@ -148,7 +148,7 @@ INTERFACES_KERNEL += 	__main mem_op kmem_space boot_uart_init     \
 			irq_chip_generic bootstrap                  \
 			outer_cache utcb_support                    \
 			irq_mgr_multi_chip smc_call psci mem_chunk  \
-      sc_scheduler
+      sc_scheduler ready_queue
 
 INTERFACES_KERNEL-$(CONFIG_ARM_ACPI) += acpi acpi_fadt
 INTERFACES_KERNEL-$(CONFIG_ARM_MPCORE) += scu
@@ -217,6 +217,7 @@ platform_control_IMPL   += platform_control-arm-psci
 psci_IMPL		:= psci-arm
 sched_context_IMPL	:= sched_context-fcc sched_context
 sc_scheduler_IMPL	:= sc_scheduler
+ready_queue_IMPL	:= ready_queue
 scu_IMPL                := scu
 spin_lock_IMPL		:= spin_lock spin_lock-arm spin_lock-arm-$(BITS)
 startup_IMPL		:= startup startup-arm
