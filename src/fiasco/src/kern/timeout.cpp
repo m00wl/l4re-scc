@@ -206,7 +206,7 @@ Timeout::set(Unsigned64 clock, Cpu_number cpu)
   assert (!is_set());
 
   _wakeup = clock;
-  //printf("setting thread timeout @ %llu\n", clock);
+  if (M_TIMER_DEBUG) printf("TIMER> setting thread timeout @ %llu\n", clock);
   Timeout_q::timeout_queue.cpu(cpu).enqueue(this);
 }
 
@@ -313,7 +313,7 @@ Timeout_q::do_timeouts()
   // ensure we always terminate
   assert((end >= 0) && (end < Wakeup_queue_count));
 
-  //printf("checking timeouts @ %llu\n", now);
+  if (M_TIMER_DEBUG) printf("TIMER> checking timeouts @ %llu\n", now);
   for (;;)
     {
       To_list &q = first(start);

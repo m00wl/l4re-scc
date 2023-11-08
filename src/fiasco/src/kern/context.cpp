@@ -725,6 +725,7 @@ PUBLIC
 void
 Context::schedule()
 {
+  printf("%p\n", __builtin_return_address(0));
   auto current = SC_Scheduler::get_current();
   auto prio = current->prio();
   (void)prio;
@@ -899,7 +900,7 @@ PUBLIC
 void
 Context::activate()
 {
-  printf("c: activate\n");
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> context %p: activated\n", this);
   auto guard = lock_guard(cpu_lock);
   if (xcpu_state_change(~0UL, Thread_ready, true))
     current()->switch_to_locked(this);
@@ -1441,13 +1442,12 @@ Context::xcpu_state_change(Mword mask, Mword add, bool lazy_q = false)
  *
  * This function enqueues a DRQ and blocks the current context for a reply DRQ.
  */
-PUBLIC inline NEEDS[Context::enqueue_drq, "logdefs.h", "thread_state.h"]
+PUBLIC //inline NEEDS[Context::enqueue_drq, "logdefs.h", "thread_state.h"]
 void
 Context::drq(Drq *drq, Drq::Request_func *func, void *arg,
              Drq::Wait_mode wait = Drq::Wait)
 {
-  if (0)
-    printf("CPU[%2u:%p]: > Context::drq(this=%p, func=%p, arg=%p)\n", cxx::int_value<Cpu_number>(current_cpu()), current(), this, func,arg);
+  if (M_DRQ_DEBUG) printf("DRQ> CPU[%2u:%p]: > Context::drq(this=%p, func=%p, arg=%p)\n", cxx::int_value<Cpu_number>(current_cpu()), current(), this, func,arg);
   Context *cur = current();
   LOG_TRACE("DRQ handling", "drq", cur, Drq_log,
       l->type = Drq_log::Type::Send;
@@ -1473,6 +1473,8 @@ Context::drq(Drq *drq, Drq::Request_func *func, void *arg,
   //LOG_MSG_3VAL(src, "<drq", src->state(), Mword(this), 0);
   while (wait == Drq::Wait && cur->state() & Thread_drq_wait)
     {
+      printf("We hit the context::drq::schedule()\n");
+      // TOMO: this is soft blocking or hard?
       cur->state_del(Thread_ready_mask);
       cur->schedule();
     }
@@ -1508,7 +1510,7 @@ Context::kernel_context_drq(Drq::Request_func *func, void *arg)
   return schedule_switch_to_locked(kc) != Switch::Ok;
 }
 
-PUBLIC inline NEEDS[Context::drq]
+PUBLIC //inline NEEDS[Context::drq]
 void
 Context::drq(Drq::Request_func *func, void *arg,
              Drq::Wait_mode wait = Drq::Wait)

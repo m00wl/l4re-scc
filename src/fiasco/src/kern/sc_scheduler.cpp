@@ -70,7 +70,7 @@ SC_Scheduler::set_current(Sched_context *sc)
   Timeout * const tt { timeslice_timeout.current() };
   Unsigned64 clock { Timer::system_clock() };
   tt->reset();
-  //printf("setting timeslice timeout @ %llu\n", clock + sc->left());
+  if (M_TIMER_DEBUG) printf("TIMER> setting timeslice timeout @ %llu\n", clock + sc->left());
   tt->set(clock + sc->left(), current_cpu());
 
   // Update left of current.

@@ -427,7 +427,7 @@ Thread::handle_timer_interrupt()
   //if ((Timeout_q::timeout_queue.cpu(_cpu).do_timeouts() || resched)
   //    && !Sched_context::rq.current().schedule_in_progress)
     {
-      //printf("reschedule after timer interrupt\n");
+      if (M_TIMER_DEBUG) printf("TIMER> reschedule after timer interrupt\n");
       SC_Scheduler::schedule(false);
       assert (timeslice_timeout.cpu(current_cpu())->is_set());	// Coma check
     }
@@ -766,7 +766,7 @@ Thread::do_migration()
 
   if ((Mword)inf & 0x3)
   {
-    //printf("already migrated, nothing to do.\n");
+    if (M_MIGRATION_DEBUG) printf("MIGRATION> already migrated, nothing to do.\n");
     return (Mword)inf & 1; // already migrated, nothing to do
   }
 
@@ -774,13 +774,13 @@ Thread::do_migration()
 
   if (current() == this)
     {
-      //printf("idle thread helps me to migrate\n");
+      if (M_MIGRATION_DEBUG) printf("MIGRATION> idle thread helps me to migrate\n");
       assert (current_cpu() == home_cpu());
       return kernel_context_drq(handle_migration_helper, inf);
     }
   else
     {
-      //printf("I help other thread to migrate\n");
+      if (M_MIGRATION_DEBUG) printf("MIGRATION> I help other thread to migrate\n");
       Cpu_number target_cpu = access_once(&inf->cpu);
       bool resched = migrate_away(inf, false);
       resched |= migrate_to(target_cpu, false);
@@ -1074,7 +1074,7 @@ Thread::migrate(Migration *info)
 {
   assert (cpu_lock.test());
 
-  //printf("Thread migration: src_cpu:%u, target_cpu:%u\n", cxx::int_value<Cpu_number>(home_cpu()), cxx::int_value<Cpu_number>(info->cpu));
+  if (M_MIGRATION_DEBUG) printf("MIGRATION> Thread migration: src_cpu:%u, target_cpu:%u\n", cxx::int_value<Cpu_number>(home_cpu()), cxx::int_value<Cpu_number>(info->cpu));
   LOG_TRACE("Thread migration", "mig", this, Migration_log,
       l->state = state(false);
       l->src_cpu = home_cpu();
