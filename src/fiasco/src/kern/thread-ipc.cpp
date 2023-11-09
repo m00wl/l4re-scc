@@ -674,7 +674,6 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
 
   if (next)
     {
-      printf("next was hit\n");
       state_change_dirty(~Thread_ipc_mask, Thread_receive_in_progress);
       next->ipc_send_msg(this, !sender);
       state_del_dirty(Thread_ipc_mask);
