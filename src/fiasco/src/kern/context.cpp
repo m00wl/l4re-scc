@@ -899,12 +899,12 @@ Context::update_ready_list()
  * Check if Context is in ready-list.
  * @return 1 if thread is in ready-list, 0 otherwise
  */
-PUBLIC inline
+PUBLIC //inline
 Mword
 Context::in_ready_list() const
 {
-  panic("c: in_ready_list not available\n");
-  //return sched()->in_ready_list();
+  //panic("c: in_ready_list not available\n");
+  return sched()->in_ready_queue();
 }
 
 
@@ -1073,15 +1073,15 @@ Context::switch_exec_locked(Context *t, enum Helping_mode mode = Not_Helping)
   // Must be called with CPU lock held
   assert (t);
   assert (cpu_lock.test());
+  assert (current() != t);
   assert (current() == this);
-  //assert (current() != t);
-  if (current() == t)
-  {
-    //printf("thread scheduled to itself.\n");
-    LOG_CONTEXT_SWITCH;
-    CNT_CONTEXT_SWITCH;
-    return switch_handle_drq();
-  }
+  //if (current() == t)
+  //{
+  //  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> thread scheduled to itself.\n");
+  //  LOG_CONTEXT_SWITCH;
+  //  CNT_CONTEXT_SWITCH;
+  //  return switch_handle_drq();
+  //}
 
   // only for logging
   Context *t_orig = t;
@@ -1091,12 +1091,13 @@ Context::switch_exec_locked(Context *t, enum Helping_mode mode = Not_Helping)
   // instead, this is transitive
   //
 
-  //if (EXPECT_FALSE(t->running_on_different_cpu()))
-  //  {
-  //    if (!t->in_ready_list())
-  //      Sched_context::rq.current().ready_enqueue(t->sched());
-  //    return Switch::Failed;
-  //  }
+  if (EXPECT_FALSE(t->running_on_different_cpu()))
+    {
+      if (!t->in_ready_list())
+        //Sched_context::rq.current().ready_enqueue(t->sched());
+        Ready_queue::rq.current().ready_enqueue(t->sched());
+      return Switch::Failed;
+    }
 
 
   LOG_CONTEXT_SWITCH;

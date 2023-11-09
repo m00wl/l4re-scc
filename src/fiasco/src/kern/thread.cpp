@@ -503,97 +503,100 @@ PRIVATE
 bool
 Thread::do_kill()
 {
-  panic("Thread::do_kill: sc not available here\n");
-  ////
-  //// Kill this thread
-  ////
+  //panic("Thread::do_kill: sc not available here\n");
+  //
+  // Kill this thread
+  //
 
-  //// But first prevent it from being woken up by asynchronous events
+  // But first prevent it from being woken up by asynchronous events
 
-  //{
-  //  auto guard = lock_guard(cpu_lock);
+  {
+    auto guard = lock_guard(cpu_lock);
 
-  //  // if IPC timeout active, reset it
-  //  if (_timeout)
-  //    _timeout->reset();
+    // if IPC timeout active, reset it
+    if (_timeout)
+      _timeout->reset();
 
-  //  Sched_context::Ready_queue &rq = Sched_context::rq.current();
+    //Sched_context::Ready_queue &rq = Sched_context::rq.current();
+    Ready_queue &rq = Ready_queue::rq.current();
 
-  //  // Switch to time-sharing scheduling context
-  //  if (sched() != sched_context())
-  //    switch_sched(sched_context(), &rq);
+    // Switch to time-sharing scheduling context
+    //if (sched() != sched_context())
+    //  switch_sched(sched_context(), &rq);
 
-  //  if (!rq.current_sched() || rq.current_sched()->context() == this)
-  //    rq.set_current_sched(current()->sched());
-  //}
+    if (!rq.current_sched() || rq.current_sched()->context() == this)
+      rq.set_current_sched(current()->sched());
+  }
 
-  //// if other threads want to send me IPC messages, abort these
-  //// operations
-  //{
-  //  auto guard = lock_guard(cpu_lock);
-  //  while (Sender *s = Sender::cast(sender_list()->first()))
-  //    {
-  //      s->sender_dequeue(sender_list());
-  //      s->ipc_receiver_aborted();
-  //      Proc::preemption_point();
-  //    }
-  //}
+  // if other threads want to send me IPC messages, abort these
+  // operations
+  {
+    auto guard = lock_guard(cpu_lock);
+    while (Sender *s = Sender::cast(sender_list()->first()))
+      {
+        s->sender_dequeue(sender_list());
+        s->ipc_receiver_aborted();
+        Proc::preemption_point();
+      }
+  }
 
-  //// if engaged in IPC operation, stop it
-  //if (in_sender_list())
-  //  {
-  //    while (Locked_prio_list *q = wait_queue())
-  //      {
-  //        auto g = lock_guard(q->lock());
-  //        if (wait_queue() == q)
-  //          {
-  //            sender_dequeue(q);
-  //            set_wait_queue(0);
-  //            break;
-  //          }
-  //      }
-  //  }
+  // if engaged in IPC operation, stop it
+  if (in_sender_list())
+    {
+      while (Locked_prio_list *q = wait_queue())
+        {
+          auto g = lock_guard(q->lock());
+          if (wait_queue() == q)
+            {
+              sender_dequeue(q);
+              set_wait_queue(0);
+              break;
+            }
+        }
+    }
 
-  //if (utcb().kern())
-  //  utcb().access()->free_marker = Utcb::Free_marker;
-  //// No UTCB access beyond this point!
+  if (utcb().kern())
+    utcb().access()->free_marker = Utcb::Free_marker;
+  // No UTCB access beyond this point!
 
-  //release_fpu_if_owner();
+  release_fpu_if_owner();
 
-  //vcpu_enter_kernel_mode(vcpu_state().access());
-  //vcpu_update_state();
+  vcpu_enter_kernel_mode(vcpu_state().access());
+  vcpu_update_state();
 
-  //unbind();
-  //vcpu_set_user_space(0);
+  unbind();
+  vcpu_set_user_space(0);
 
-  //cpu_lock.lock();
+  cpu_lock.lock();
 
-  //arch_vcpu_ext_shutdown();
+  arch_vcpu_ext_shutdown();
 
-  //state_change_dirty(~Thread_dying, Thread_dead);
+  state_change_dirty(~Thread_dying, Thread_dead);
 
-  //// dequeue from system queues
+  // dequeue from system queues
   //Sched_context::rq.current().ready_dequeue(sched());
+  Ready_queue::rq.current().ready_dequeue(sched());
 
-  //if (_del_observer)
-  //  {
-  //    _del_observer->unbind();
-  //    _del_observer = 0;
-  //  }
+  if (_del_observer)
+    {
+      _del_observer->unbind();
+      _del_observer = 0;
+    }
 
-  //rcu_wait();
+  rcu_wait();
 
-  //state_del_dirty(Thread_ready_mask);
+  state_del_dirty(Thread_ready_mask);
 
   //Sched_context::rq.current().ready_dequeue(sched());
+  Ready_queue::rq.current().ready_dequeue(sched());
 
-  //// make sure this thread really never runs again by migrating it
-  //// to the 'invalid' CPU forcefully and then switching to the kernel
-  //// thread for doing the last bits.
-  //force_to_invalid_cpu();
-  //kernel_context_drq(handle_kill_helper, 0);
-  //kdb_ke("Im dead");
-  //return true;
+  // make sure this thread really never runs again by migrating it
+  // to the 'invalid' CPU forcefully and then switching to the kernel
+  // thread for doing the last bits.
+  force_to_invalid_cpu();
+  kernel_context_drq(handle_kill_helper, 0);
+  kdb_ke("I'm dead");
+  return true;
 }
 
 PRIVATE inline
@@ -624,19 +627,20 @@ PUBLIC
 bool
 Thread::kill()
 {
-  panic("Thread::kill: sc not available here\n");
-  //auto guard = lock_guard(cpu_lock);
+  //panic("Thread::kill: sc not available here\n");
+  auto guard = lock_guard(cpu_lock);
 
-  //if (home_cpu() == current_cpu())
-  //  {
-  //    prepare_kill();
-  //    Sched_context::rq.current().deblock(sched(), current()->sched());
-  //    return true;
-  //  }
+  if (home_cpu() == current_cpu())
+    {
+      prepare_kill();
+      //Sched_context::rq.current().deblock(sched(), current()->sched());
+      Ready_queue::rq.current().deblock(sched(), current()->sched());
+      return true;
+    }
 
-  //drq(Thread::handle_remote_kill, 0);
+  drq(Thread::handle_remote_kill, 0);
 
-  //return true;
+  return true;
 }
 
 
@@ -697,9 +701,11 @@ PUBLIC static inline
 void
 Thread::assert_irq_entry()
 {
-  panic("Thread: assert_irq_entry: sc not accessible here\n");
+  //panic("Thread: assert_irq_entry: sc not accessible here\n");
   //assert(Sched_context::rq.current().schedule_in_progress
   //           || current_thread()->state() & (Thread_ready_mask | Thread_drq_wait | Thread_waiting | Thread_ipc_transfer));
+  assert(Ready_queue::rq.current().schedule_in_progress
+             || current_thread()->state() & (Thread_ready_mask | Thread_drq_wait | Thread_waiting | Thread_ipc_transfer));
 }
 
 // ---------------------------------------------------------------------------

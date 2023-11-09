@@ -42,6 +42,8 @@ public:
     if (EXPECT_FALSE (sc->in_ready_queue()))
       return;
 
+    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> ready_queue enqueue: %p [RQ has %d entries].\n", sc, c);
+
     enqueue(sc, true);
   }
 
@@ -52,6 +54,8 @@ public:
     // Don't dequeue threads which aren't enqueued
     if (EXPECT_FALSE (!sc->in_ready_queue()))
       return;
+
+    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> ready_queue dequeue: %p [RQ has %d entries].\n", sc, c);
 
     dequeue(sc);
   }

@@ -1227,51 +1227,52 @@ Thread::remote_ipc_send(Ipc_remote_request *rq)
          rq->timeout);
 #endif
 
-  (void)rq;
-  panic("Thread::remote_ipc_send: sc not available here\n");
-  //Check_sender r = rq->partner->check_sender(this, rq->timeout);
-  //switch (r.s)
-  //  {
-  //  case Check_sender::Failed:
-  //    xcpu_state_change(~Thread_ipc_mask, 0);
-  //    rq->result = Check_sender::Failed;
-  //    return false;
-  //  case Check_sender::Queued:
-  //    rq->result = Check_sender::Queued;
-  //    return false;
-  //  default:
-  //    break;
-  //  }
+  //(void)rq;
+  //panic("Thread::remote_ipc_send: sc not available here\n");
+  Check_sender r = rq->partner->check_sender(this, rq->timeout);
+  switch (r.s)
+    {
+    case Check_sender::Failed:
+      xcpu_state_change(~Thread_ipc_mask, 0);
+      rq->result = Check_sender::Failed;
+      return false;
+    case Check_sender::Queued:
+      rq->result = Check_sender::Queued;
+      return false;
+    default:
+      break;
+    }
 
-  //if (rq->tag.transfer_fpu()
-  //    && (rq->partner->_utcb_handler
-  //        || rq->partner->utcb().access()->inherit_fpu()))
-  //  rq->partner->spill_fpu_if_owner();
+  if (rq->tag.transfer_fpu()
+      && (rq->partner->_utcb_handler
+          || rq->partner->utcb().access()->inherit_fpu()))
+    rq->partner->spill_fpu_if_owner();
 
-  //// trigger remote_ipc_receiver_ready path, because we may need to grab locks
-  //// and this is forbidden in a DRQ handler. So transfer the IPC in usual
-  //// thread code. However, this induces a overhead of two extra IPIs.
-  //if (rq->tag.items())
-  //  {
-  //    //LOG_MSG_3VAL(rq->partner, "pull", dbg_id(), 0, 0);
-  //    xcpu_state_change(~Thread_send_wait, Thread_ready);
-  //    rq->partner->state_change_dirty(~(Thread_ipc_mask | Thread_ready), Thread_ipc_transfer);
-  //    rq->result = r;
-  //    return true;
-  //  }
-  //bool success = transfer_msg(rq->tag, rq->partner,
-  //                            _ipc_send_rights, r.is_open_wait());
-  //if (success && rq->have_rcv)
-  //  xcpu_state_change(~Thread_send_wait, Thread_receive_wait);
-  //else
-  //  xcpu_state_change(~Thread_ipc_mask, 0);
+  // trigger remote_ipc_receiver_ready path, because we may need to grab locks
+  // and this is forbidden in a DRQ handler. So transfer the IPC in usual
+  // thread code. However, this induces an overhead of two extra IPIs.
+  if (rq->tag.items())
+    {
+      //LOG_MSG_3VAL(rq->partner, "pull", dbg_id(), 0, 0);
+      xcpu_state_change(~Thread_send_wait, Thread_ready);
+      rq->partner->state_change_dirty(~(Thread_ipc_mask | Thread_ready), Thread_ipc_transfer);
+      rq->result = r;
+      return true;
+    }
+  bool success = transfer_msg(rq->tag, rq->partner,
+                              _ipc_send_rights, r.is_open_wait());
+  if (success && rq->have_rcv)
+    xcpu_state_change(~Thread_send_wait, Thread_receive_wait);
+  else
+    xcpu_state_change(~Thread_ipc_mask, 0);
 
-  //rq->result = success ? Check_sender::Done : Check_sender::Failed;
-  //rq->partner->state_change_dirty(~Thread_ipc_mask, Thread_ready);
-  //if (rq->partner->home_cpu() == current_cpu() && current() != rq->partner)
-  //  Sched_context::rq.current().ready_enqueue(rq->partner->sched());
+  rq->result = success ? Check_sender::Done : Check_sender::Failed;
+  rq->partner->state_change_dirty(~Thread_ipc_mask, Thread_ready);
+  if (rq->partner->home_cpu() == current_cpu() && current() != rq->partner)
+    //Sched_context::rq.current().ready_enqueue(rq->partner->sched());
+    Ready_queue::rq.current().ready_enqueue(rq->partner->sched());
 
-  //return true;
+  return true;
 }
 
 PRIVATE static

@@ -318,47 +318,47 @@ PRIVATE inline NOEXPORT
 L4_error
 Ipc_gate::block(Thread *ct, L4_timeout const &to, Utcb *u)
 {
-  (void)ct;
-  (void)to;
-  (void)u;
-  panic("ipc_gate::block: sc not available here\n");
-  //Unsigned64 t = 0;
-  //if (!to.is_never())
-  //  {
-  //    t = to.microsecs(Timer::system_clock(), u);
-  //    if (!t)
-	//return L4_error::Timeout;
-  //  }
+  //(void)ct;
+  //(void)to;
+  //(void)u;
+  //panic("ipc_gate::block: sc not available here\n");
+  Unsigned64 t = 0;
+  if (!to.is_never())
+    {
+      t = to.microsecs(Timer::system_clock(), u);
+      if (!t)
+	return L4_error::Timeout;
+    }
 
-  //  {
-  //    auto g = lock_guard(_wait_q.lock());
-  //    ct->set_wait_queue(&_wait_q);
-  //    ct->sender_enqueue(&_wait_q, ct->sched_context()->prio());
-  //  }
-  //ct->state_change_dirty(~Thread_ready, Thread_send_wait);
+    {
+      auto g = lock_guard(_wait_q.lock());
+      ct->set_wait_queue(&_wait_q);
+      ct->sender_enqueue(&_wait_q, ct->sched()->prio());
+    }
+  ct->state_change_dirty(~Thread_ready, Thread_send_wait);
 
-  //IPC_timeout timeout;
-  //if (t)
-  //  {
-  //    timeout.set(t, current_cpu());
-  //    ct->set_timeout(&timeout);
-  //  }
+  IPC_timeout timeout;
+  if (t)
+    {
+      timeout.set(t, current_cpu());
+      ct->set_timeout(&timeout);
+    }
 
-  //ct->schedule();
+  ct->schedule();
 
-  //ct->state_change(~Thread_ipc_mask, Thread_ready);
-  //ct->reset_timeout();
+  ct->state_change(~Thread_ipc_mask, Thread_ready);
+  ct->reset_timeout();
 
-  //if (EXPECT_FALSE(ct->in_sender_list() && timeout.has_hit()))
-  //  {
-  //    auto g = lock_guard(_wait_q.lock());
-  //    if (!ct->in_sender_list())
-	//return L4_error::None;
+  if (EXPECT_FALSE(ct->in_sender_list() && timeout.has_hit()))
+    {
+      auto g = lock_guard(_wait_q.lock());
+      if (!ct->in_sender_list())
+	return L4_error::None;
 
-  //    ct->sender_dequeue(&_wait_q);
-  //    return L4_error::Timeout;
-  //  }
-  //return L4_error::None;
+      ct->sender_dequeue(&_wait_q);
+      return L4_error::Timeout;
+    }
+  return L4_error::None;
 }
 
 
