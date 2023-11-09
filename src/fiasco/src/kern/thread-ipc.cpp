@@ -477,39 +477,38 @@ Thread::get_next_sender(Sender *sender)
   return 0;
 }
 
-PRIVATE inline NEEDS ["context.h", "ready_queue.h"]
+PRIVATE inline
 bool
 Thread::activate_ipc_partner(Thread *partner, Cpu_number current_cpu,
                              bool do_switch, bool closed_wait)
 {
-  (void)partner;
-  (void)current_cpu;
-  (void)do_switch;
-  (void)closed_wait;
-  panic("Thread::activate_ipc_partner: sc not available here\n");
-  //if (partner->home_cpu() == current_cpu)
-  //{
-  //  //auto &rq = Sched_context::rq.current();
-  //  //Sched_context *cs = rq.current_sched();
-  //  //Sched_context *cs = SC_Scheduler::get_current();
-  //  Ready_queue &rq { Ready_queue::rq.current() };
-  //  Sched_context *cs = rq.current_sched();
-  //  do_switch = do_switch && (closed_wait || cs != sched());
-  //  partner->state_change_dirty(~Thread_ipc_transfer, Thread_ready);
-  //  if (do_switch)
-  //    {
-  //      schedule_if(switch_exec_locked(partner, Not_Helping) != Switch::Ok);
-  //      //if (switch_exec_locked(partner, Not_Helping) != Switch::Ok) {
-  //      //  SC_Scheduler::schedule(false);
-  //      }
-  //      return true;
-  //    }
-  //  else
-  //    return deblock_and_schedule(partner);
-  //}
+  //(void)partner;
+  //(void)current_cpu;
+  //(void)do_switch;
+  //(void)closed_wait;
+  //panic("Thread::activate_ipc_partner: sc not available here\n");
+  if (partner->home_cpu() == current_cpu)
+  {
+    //auto &rq = Sched_context::rq.current();
+    //Sched_context *cs = rq.current_sched();
+    //Sched_context *cs = SC_Scheduler::get_current();
+    Ready_queue &rq { Ready_queue::rq.current() };
+    Sched_context *cs = rq.current_sched();
+    do_switch = do_switch && (closed_wait || cs != sched());
+    partner->state_change_dirty(~Thread_ipc_transfer, Thread_ready);
+    if (do_switch)
+      {
+        schedule_if(switch_exec_locked(partner, Not_Helping) != Switch::Ok);
+        //if (switch_exec_locked(partner, Not_Helping) != Switch::Ok)
+        //  SC_Scheduler::schedule(false);
+        return true;
+      }
+    else
+      return deblock_and_schedule(partner);
+  }
 
-  //partner->xcpu_state_change(~Thread_ipc_transfer, Thread_ready);
-  //return false;
+  partner->xcpu_state_change(~Thread_ipc_transfer, Thread_ready);
+  return false;
 }
 
 /**

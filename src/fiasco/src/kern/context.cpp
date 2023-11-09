@@ -1037,19 +1037,20 @@ Context::switch_to_locked(Context *t)
     schedule();
 }
 
-PUBLIC inline NEEDS [Context::switch_to_locked]
+PUBLIC //inline NEEDS [Context::switch_to_locked]
 bool
 Context::deblock_and_schedule(Context *to)
 {
-  (void)to;
-  panic("c: deblock_and_schedule not available\n");
+  //(void)to;
+  //panic("c: deblock_and_schedule not available\n");
   //if (Sched_context::rq.current().deblock(to->sched(), sched(), true))
-  //  {
-  //    switch_to_locked(to);
-  //    return true;
-  //  }
+  if (Ready_queue::rq.current().deblock(to->sched(), sched(), true))
+    {
+      switch_to_locked(to);
+      return true;
+    }
 
-  //return false;
+  return false;
 }
 
 

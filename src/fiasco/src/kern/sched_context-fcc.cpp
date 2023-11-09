@@ -117,7 +117,7 @@ Sched_context::Sched_context(Unsigned8 prio, Unsigned64 quantum)
 PUBLIC
 Sched_context::~Sched_context()
 {
-  printf("sched_context was deleted\n");
+  printf("WARNING: sched_context was deleted [was attached to thread %p].\n", this->context());
 }
 
 PUBLIC //inline
