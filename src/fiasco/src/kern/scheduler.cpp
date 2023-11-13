@@ -114,8 +114,7 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
   {
     if (M_SCHEDULER_DEBUG)
     {
-      printf("SCHEDULER> try to run thread %p\n", &thread);
-      printf("SCHEDULER> but it that has no sched_context attached.\n");
+      printf("SCHEDULER> trying to run thread %p which has no sched_context attached.\n", this);
       printf("SCHEDULER> creating a new one...\n");
       //printf("SCHEDULER> RQ has %d entries.\n", SC_Scheduler::rq.current().c);
     }

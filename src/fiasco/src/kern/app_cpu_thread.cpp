@@ -29,6 +29,8 @@ IMPLEMENTATION [mp]:
 #include "timer_tick.h"
 #include "spin_lock.h"
 #include "warn.h"
+#include "sched_context.h"
+#include "ready_queue.h"
 
 PUBLIC explicit inline
 App_cpu_thread::App_cpu_thread(Ram_quota *q)
@@ -47,6 +49,12 @@ App_cpu_thread::may_be_create(Cpu_number cpu, bool cpu_never_seen_before)
 
   Kernel_thread *t = new (Ram_quota::root) App_cpu_thread(Ram_quota::root);
   assert (t);
+
+  Sched_context *sc = Sched_context::create(Ram_quota::root, Config::Kernel_prio);
+  assert(sc);
+
+  sc->set_context(t);
+  t->set_sched(sc);
 
   t->set_home_cpu(cpu);
   t->set_current_cpu(cpu);
@@ -83,7 +91,9 @@ App_cpu_thread::bootstrap(Mword resume)
   if (!resume)
     {
       kernel_context(ccpu, this);
-      Sched_context::rq.current().set_idle(this->sched());
+      Sched_context::set_kernel_sc(home_cpu(), sched());
+      //Sched_context::rq.current().set_idle(this->sched());
+      Ready_queue::rq.current().set_idle(this->sched());
 
       Timer_tick::setup(ccpu);
     }
@@ -93,7 +103,8 @@ App_cpu_thread::bootstrap(Mword resume)
 
   if (!resume)
     // Setup initial timeslice
-    Sched_context::rq.current().set_current_sched(sched());
+    //Sched_context::rq.current().set_current_sched(sched());
+    Ready_queue::rq.current().set_current_sched(sched());
 
   if (!resume)
     Per_cpu_data::run_late_ctors(ccpu);

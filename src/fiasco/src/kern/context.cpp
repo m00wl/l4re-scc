@@ -744,6 +744,7 @@ Context::schedule()
 
   //panic("c: schedule not available\n");
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> we schedule now [RQ has %d entries]\n", Ready_queue::rq.current().c);
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> i am thread: %p with sc: %p.\n", this, sched());
   auto guard = lock_guard(cpu_lock);
   //assert (!Sched_context::rq.current().schedule_in_progress);
   assert (!Ready_queue::rq.current().schedule_in_progress);
@@ -904,6 +905,7 @@ Mword
 Context::in_ready_list() const
 {
   //panic("c: in_ready_list not available\n");
+  assert(sched());
   return sched()->in_ready_queue();
 }
 
@@ -1489,7 +1491,6 @@ Context::drq(Drq *drq, Drq::Request_func *func, void *arg,
   if (wait == Drq::Wait)
     cur->state_add(Thread_drq_wait);
 
-
   enqueue_drq(drq);
 
   //LOG_MSG_3VAL(src, "<drq", src->state(), Mword(this), 0);
@@ -1911,7 +1912,7 @@ bool
 Context::Pending_rqq::handle_requests(Context **mq)
 {
   (void)mq;
-  panic("c: Pending_rqq::handle_requests not available\n")
+  panic("c: Pending_rqq::handle_requests not available\n");
   ////LOG_MSG_3VAL(current(), "phq", current_cpu(), 0, 0);
   //if (0)
   //  printf("CPU[%2u:%p]: Context::Pending_rqq::handle_requests() this=%p\n", cxx::int_value<Cpu_number>(current_cpu()), current(), this);
@@ -2072,25 +2073,27 @@ PRIVATE inline
 bool
 Context::_execute_drq(Drq *rq, bool offline_cpu = false)
 {
-  (void)rq;
-  (void)offline_cpu;
-  panic("c: _execute_drq not available\n");
-  //bool do_sched = _drq_q.execute_request(rq, Drq_q::No_drop, true);
-  //// the DRQ function executed above might be preemptible in the case
-  //// of local execution
-  //if (EXPECT_FALSE(!offline_cpu && home_cpu() != current_cpu()))
-  //  return false;
+  //(void)rq;
+  //(void)offline_cpu;
+  //panic("c: _execute_drq not available\n");
+  bool do_sched = _drq_q.execute_request(rq, Drq_q::No_drop, true);
+  // the DRQ function executed above might be preemptible in the case
+  // of local execution
+  if (EXPECT_FALSE(!offline_cpu && home_cpu() != current_cpu()))
+    return false;
 
-  //if (!in_ready_list() && (state(false) & Thread_ready_mask))
-  //  {
-  //    if (EXPECT_FALSE(offline_cpu))
-  //      Sched_context::rq.cpu(home_cpu()).ready_enqueue(sched());
-  //    else
-  //      Sched_context::rq.current().ready_enqueue(sched());
-  //    return true;
-  //  }
+  if (!in_ready_list() && (state(false) & Thread_ready_mask))
+    {
+      if (EXPECT_FALSE(offline_cpu))
+        //Sched_context::rq.cpu(home_cpu()).ready_enqueue(sched());
+        Ready_queue::rq.cpu(home_cpu()).ready_enqueue(sched());
+      else
+        //Sched_context::rq.current().ready_enqueue(sched());
+        Ready_queue::rq.current().ready_enqueue(sched());
+      return true;
+    }
 
-  //return do_sched;
+  return do_sched;
 }
 
 PRIVATE inline

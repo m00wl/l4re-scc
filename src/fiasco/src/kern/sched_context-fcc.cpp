@@ -171,8 +171,8 @@ Sched_context::get_kernel_sc()
 
 PUBLIC static inline
 void
-Sched_context::set_kernel_sc(Sched_context *sc)
-{ Sched_context::kernel_sc.current() = sc; }
+Sched_context::set_kernel_sc(Cpu_number cpu, Sched_context *sc)
+{ Sched_context::kernel_sc.cpu(cpu) = sc; }
 
 /**
  * Return priority of Sched_context

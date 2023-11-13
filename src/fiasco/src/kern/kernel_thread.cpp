@@ -129,7 +129,7 @@ Kernel_thread::run()
   // No initcalls after this point!
 
   kernel_context(home_cpu(), this);
-  // TOMO: set kernel sc here?
+  Sched_context::set_kernel_sc(home_cpu(), sched());
 
   Rcu::leave_idle(home_cpu());
 

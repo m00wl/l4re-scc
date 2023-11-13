@@ -91,7 +91,6 @@ kernel_main()
   static Sched_context *kernel_sc = Sched_context::create(Ram_quota::root, Config::Kernel_prio);
   kernel_sc->set_context(kernel);
   kernel->set_sched(kernel_sc);
-  Sched_context::set_kernel_sc(kernel_sc);
   Task *const ktask = Kernel_task::kernel_task();
   kernel->kbind(ktask);
   assert(((Mword)kernel->init_stack() & 7) == 0);

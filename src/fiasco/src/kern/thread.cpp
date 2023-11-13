@@ -756,6 +756,17 @@ Thread::start_migration()
 
   assert (!((Mword)m & 0x3)); // ensure alignment
 
+  if (!sched())
+  {
+    if (M_SCHEDULER_DEBUG)
+    {
+      printf("SCHEDULER> trying to migrate thread %p which has no sched_context attached.\n", this);
+      printf("SCHEDULER> creating a new one...\n");
+    }
+    alloc_sched_context(Config::Default_prio);
+    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> thread %p got sched_context %p", this, this->sched());
+  }
+
   if (!m || !mp_cas(&_migration, m, (Migration*)0))
     // TOMO: migration was already started/done by someone else.
     return reinterpret_cast<Migration*>(0x2); // bit one == 0 --> no need to reschedule
@@ -1222,12 +1233,14 @@ Thread::handle_remote_requests_irq()
   if (on_current_cpu)
     resched |= c->handle_drq();
 
-  if (Sched_context::rq.current().schedule_in_progress)
+  //if (Sched_context::rq.current().schedule_in_progress)
+  if (Ready_queue::rq.current().schedule_in_progress)
     {
       if (   (c->state() & Thread_ready_mask)
           && !c->in_ready_list()
           && on_current_cpu)
-        Sched_context::rq.current().ready_enqueue(c->sched());
+        //Sched_context::rq.current().ready_enqueue(c->sched());
+        Ready_queue::rq.current().ready_enqueue(c->sched());
     }
   else if (resched)
     c->schedule();
@@ -1259,9 +1272,12 @@ Thread::migrate_away(Migration *inf, bool remote)
 
   //printf("[%u] %lx: m %lx %u -> %u\n", current_cpu(), current_thread()->dbg_id(), this->dbg_id(), cpu(), inf->cpu);
     {
-      Sched_context::Ready_queue &rq = EXPECT_TRUE(!remote)
-                                     ? Sched_context::rq.current()
-                                     : Sched_context::rq.cpu(home_cpu());
+      //Sched_context::Ready_queue &rq = EXPECT_TRUE(!remote)
+      //                               ? Sched_context::rq.current()
+      //                               : Sched_context::rq.cpu(home_cpu());
+      Ready_queue &rq = EXPECT_TRUE(!remote)
+                      ? Ready_queue::rq.current()
+                      : Ready_queue::rq.cpu(home_cpu());
 
       // if we are in the middle of the scheduler, leave it now
       if (rq.schedule_in_progress == this)
@@ -1293,10 +1309,10 @@ Thread::migrate_away(Migration *inf, bool remote)
       if (_pending_rq.queued())
         check (q.dequeue(&_pending_rq));
 
-      Sched_context *sc = sched_context();
+      Sched_context *sc = sched();
       sc->set(inf->sp);
       sc->replenish();
-      set_sched(sc);
+      //set_sched(sc);
 
       Mem::mp_wmb();
 
@@ -1339,7 +1355,8 @@ Thread::migrate_to(Cpu_number target_cpu, bool /*remote*/)
         {
           g.reset();
           bool resched = handle_drq();
-          return resched | Sched_context::rq.current().deblock(sched(), current()->sched());
+          //return resched | Sched_context::rq.current().deblock(sched(), current()->sched());
+          return resched | Ready_queue::rq.current().deblock(sched(), current()->sched());
         }
 
       if (!_pending_rq.queued())
