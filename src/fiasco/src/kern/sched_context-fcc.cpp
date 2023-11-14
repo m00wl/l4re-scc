@@ -22,13 +22,6 @@ class Sched_context
   public Ref_cnt_obj
 {
   MEMBER_OFFSET();
-  //friend class Jdb_list_timeouts;
-  //friend class Jdb_thread_list;
-  //friend class Sched_ctxts_test;
-  //friend class Scheduler_test;
-
-  //template<typename T>
-  //friend struct Jdb_thread_list_policy;
   friend class Ready_queue;
 
   union Sp
@@ -41,19 +34,6 @@ class Sched_context
   typedef Slab_cache Self_alloc;
 
 public:
-  //typedef cxx::Sd_list<Sched_context> Fp_list;
-
-  //class Ready_queue_base : public Ready_queue_fp<Sched_context>
-  //{
-  //public:
-  //  void activate(Sched_context *s)
-  //  { _current_sched = s; }
-  //  Sched_context *current_sched() const { return _current_sched; }
-
-  //private:
-  //  Sched_context *_current_sched;
-  //};
-
   Context *context() const { return _context; }
   void set_context(Context *c) { _context = c; }
 
@@ -61,11 +41,9 @@ public:
   void *operator new(size_t);
 
 private:
-  Unsigned8 _prio;
+  Unsigned8  _prio;
   Unsigned64 _quantum;
   Unsigned64 _left;
-
-  //friend class Ready_queue_fp<Sched_context>;
 
   Context *_context;
   static Per_cpu<Sched_context *> kernel_sc;
@@ -98,41 +76,30 @@ Sched_context::Sched_context()
   _context(nullptr) //TOMO: this is highly unsafe.
 {}
 
-PUBLIC
-Sched_context::Sched_context(Unsigned8 prio)
-: _prio(prio),
-  _quantum(Config::Default_time_slice),
-  _left(Config::Default_time_slice),
-  _context(nullptr) //TOMO: this is highly unsafe.
-{}
-
-PUBLIC
-Sched_context::Sched_context(Unsigned8 prio, Unsigned64 quantum)
-: _prio(prio),
-  _quantum(quantum),
-  _left(quantum),
-  _context(nullptr) //TOMO: this is highly unsafe.
-{}
+//PUBLIC
+//Sched_context::Sched_context(Unsigned8 prio)
+//: _prio(prio),
+//  _quantum(Config::Default_time_slice),
+//  _left(Config::Default_time_slice),
+//  _context(nullptr) //TOMO: this is highly unsafe.
+//{}
+//
+//PUBLIC
+//Sched_context::Sched_context(Unsigned8 prio, Unsigned64 quantum)
+//: _prio(prio),
+//  _quantum(quantum),
+//  _left(quantum),
+//  _context(nullptr) //TOMO: this is highly unsafe.
+//{}
 
 PUBLIC
 Sched_context::~Sched_context()
-{
-  printf("WARNING: sched_context was deleted [was attached to thread %p].\n", this->context());
-}
+{ printf("WARNING: sched_context was deleted [was attached to thread %p].\n", this->context()); }
 
 PUBLIC //inline
 void
 Sched_context::operator delete (void *ptr)
-{
-  Sched_context *sc = reinterpret_cast<Sched_context *>(ptr);
-  //LOG_TRACE("Kobject delete", "del", current(), Log_destroy,
-  //          l->id = t->dbg_id();
-  //          l->obj = t;
-  //          l->type = cxx::Typeid<Sched_context>::get();
-  //          l->ram = t->ram_quota()->current());
-
-  allocator()->free(sc);
-}
+{ allocator()->free(reinterpret_cast<Sched_context *>(ptr)); }
 
 
 PUBLIC inline NEEDS[<cstddef>]
@@ -149,7 +116,8 @@ Sched_context::allocator()
 
 PUBLIC static
 Sched_context *
-Sched_context::create(Ram_quota *q, Unsigned8 prio = Config::Default_prio, Unsigned64 quantum = Config::Default_time_slice)
+//Sched_context::create(Ram_quota *q, Unsigned8 prio = Config::Default_prio, Unsigned64 quantum = Config::Default_time_slice)
+Sched_context::create(Ram_quota *q)
 {
   Auto_quota<Ram_quota> quota(q, sizeof(Sched_context));
 
@@ -161,7 +129,7 @@ Sched_context::create(Ram_quota *q, Unsigned8 prio = Config::Default_prio, Unsig
     return 0;
 
   quota.release();
-  return new (nq) Sched_context(prio, quantum);
+  return new (nq) Sched_context();
 }
 
 PUBLIC static inline

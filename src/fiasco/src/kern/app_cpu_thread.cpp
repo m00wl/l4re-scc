@@ -50,11 +50,7 @@ App_cpu_thread::may_be_create(Cpu_number cpu, bool cpu_never_seen_before)
   Kernel_thread *t = new (Ram_quota::root) App_cpu_thread(Ram_quota::root);
   assert (t);
 
-  Sched_context *sc = Sched_context::create(Ram_quota::root, Config::Kernel_prio);
-  assert(sc);
-
-  sc->set_context(t);
-  t->set_sched(sc);
+  t->alloc_sched_context();
 
   t->set_home_cpu(cpu);
   t->set_current_cpu(cpu);

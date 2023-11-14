@@ -68,15 +68,8 @@ Kernel_thread::init_workload()
   check (sigma0_thread->bind(sigma0, User<Utcb>::Ptr((Utcb*)Mem_layout::Utcb_addr)));
   check (sigma0_thread->ex_regs(Kip::k()->sigma0_ip, 0));
 
-  // TOMO: creating and then deblocking the sched_context here already surely is no problem...
-  // OR IS IT?
-  Sched_context *sigma0_sc { Sched_context::create(Ram_quota::root) };
-  assert(sigma0_sc);
-  sigma0_sc->inc_ref();
-  sigma0_sc->set_context(sigma0_thread);
-  check(map(sigma0_sc, sigma0, sigma0, C_sched_context, 0));
-  //SC_Scheduler::deblock(sigma0_sc);
-  sigma0_thread->set_sched(sigma0_sc);
+  sigma0_thread->alloc_sched_context();
+  check(map(sigma0_thread->sched(), sigma0, sigma0, C_sched_context, 0));
 
   //
   // create the boot task
@@ -106,13 +99,8 @@ Kernel_thread::init_workload()
   check (boot_thread->bind(boot_task, User<Utcb>::Ptr((Utcb*)Mem_layout::Utcb_addr)));
   check (boot_thread->ex_regs(Kip::k()->root_ip, 0));
 
-  Sched_context *boot_sc { Sched_context::create(Ram_quota::root) };
-  assert(boot_sc);
-  boot_sc->inc_ref();
-  boot_sc->set_context(boot_thread);
-  check(map(boot_sc,   boot_task, boot_task, C_sched_context, 0));
-  //SC_Scheduler::deblock(boot_sc);
-  boot_thread->set_sched(boot_sc);
+  boot_thread->alloc_sched_context();
+  check(map(boot_thread->sched(),   boot_task, boot_task, C_sched_context, 0));
 
   Ipc_gate *s0_b_gate = Ipc_gate::create(Ram_quota::root, sigma0_thread, 4 << 4);
 

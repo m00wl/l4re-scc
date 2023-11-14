@@ -628,8 +628,8 @@ Thread_object::sys_ex_regs(L4_msg_tag const &tag, Utcb *utcb, Utcb *out)
       printf("SCHEDULER> trying to sys_ex_regs remote thread %p which has no sched_context attached.\n", this);
       printf("SCHEDULER> creating a new one...\n");
     }
-    alloc_sched_context(Config::Default_prio);
-    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> thread %p got sched_context %p", this, this->sched());
+    alloc_sched_context();
+    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> thread %p got sched_context %p\n", this, this->sched());
   }
 
   drq(handle_remote_ex_regs, &params);

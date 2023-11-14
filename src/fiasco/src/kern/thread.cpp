@@ -310,9 +310,10 @@ Thread::~Thread()		// To be called in locked state.
 
 PUBLIC
 void
-Thread::alloc_sched_context(Unsigned8 prio)
+Thread::alloc_sched_context()
 {
-  Sched_context *sc = Sched_context::create(_quota, prio);
+  Sched_context *sc = Sched_context::create(_quota);
+  assert(sc);
   sc->inc_ref();
   this->set_sched(sc);
   sc->set_context(this);
@@ -763,8 +764,8 @@ Thread::start_migration()
       printf("SCHEDULER> trying to migrate thread %p which has no sched_context attached.\n", this);
       printf("SCHEDULER> creating a new one...\n");
     }
-    alloc_sched_context(Config::Default_prio);
-    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> thread %p got sched_context %p", this, this->sched());
+    alloc_sched_context();
+    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> thread %p got sched_context %p\n", this, this->sched());
   }
 
   if (!m || !mp_cas(&_migration, m, (Migration*)0))

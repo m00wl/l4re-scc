@@ -114,12 +114,13 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
   {
     if (M_SCHEDULER_DEBUG)
     {
-      printf("SCHEDULER> trying to run thread %p which has no sched_context attached.\n", this);
+      printf("SCHEDULER> trying to run thread %p which has no sched_context attached.\n", thread);
       printf("SCHEDULER> creating a new one...\n");
       //printf("SCHEDULER> RQ has %d entries.\n", SC_Scheduler::rq.current().c);
     }
     // TOMO: set prio directly from sched_param.
-    thread->alloc_sched_context(Config::Default_prio);
+    thread->alloc_sched_context();
+    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> thread %p got sched_context %p\n", thread, thread->sched());
     // TOMO: in which ready_queue to put here?
     // maybe this is important for MP implementation.
     //SC_Scheduler::deblock(thread->sched());
