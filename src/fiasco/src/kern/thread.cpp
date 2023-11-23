@@ -312,9 +312,12 @@ PUBLIC
 void
 Thread::alloc_sched_context()
 {
+  // create.
   Sched_context *sc = Sched_context::create(_quota);
   assert(sc);
   sc->inc_ref();
+
+  // set pointers.
   this->set_sched(sc);
   sc->set_context(this);
 }

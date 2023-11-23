@@ -14,6 +14,7 @@
 #include <l4/sys/task>
 #include <l4/sys/thread>
 #include <l4/sys/scheduler>
+#include <l4/sys/sched_context>
 #include <l4/sys/factory>
 
 namespace Ldr {
@@ -27,6 +28,7 @@ struct Remote_app_std_caps
     Rm_thread_cap          = 3,
     Log_cap                = 5,
     Scheduler_cap          = 7,
+    Sched_context_cap      = 12,
     // skip base caps
     External_rm_cap        = 0x10,
     Allocator_cap,
@@ -83,6 +85,7 @@ public:
     env->mem_alloc(L4::Cap<L4Re::Mem_alloc>(Caps::Allocator_cap << L4_CAP_SHIFT));
     env->parent(L4::Cap<L4Re::Parent>(Caps::Parent_cap << L4_CAP_SHIFT));
     env->scheduler(L4::Cap<L4::Scheduler>(Caps::Scheduler_cap << L4_CAP_SHIFT));
+    env->sched_context(L4::Cap<L4::Sched_context>(Caps::Sched_context_cap << L4_CAP_SHIFT));
     env->rm(L4::Cap<L4Re::Rm>(Caps::External_rm_cap << L4_CAP_SHIFT));
     env->log(L4::Cap<L4Re::Log>(Caps::Log_cap << L4_CAP_SHIFT));
     env->main_thread(L4::Cap<L4::Thread>(Caps::Rm_thread_cap << L4_CAP_SHIFT));

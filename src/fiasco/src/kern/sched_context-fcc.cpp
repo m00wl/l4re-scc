@@ -41,7 +41,12 @@ public:
   void *operator new(size_t);
 
 private:
-  Unsigned8  _prio;
+  enum Operation
+  {
+    Test = 0,
+  };
+
+  Unsigned8 _prio;
   Unsigned64 _quantum;
   Unsigned64 _left;
 
@@ -254,15 +259,33 @@ bool
 Sched_context::dominates(Sched_context *sc)
 { return prio() > sc->prio(); }
 
+PRIVATE
+L4_msg_tag
+Sched_context::test()
+{
+  printf("SC SYSCALL!\n");
+  return commit_result(0);
+}
+
 PUBLIC
 void
-Sched_context::invoke(L4_obj_ref /*self*/, L4_fpage::Rights rights,
+Sched_context::invoke(L4_obj_ref self, L4_fpage::Rights rights,
                       Syscall_frame *f, Utcb *utcb) override
 {
   (void)rights;
-  (void)f;
-  (void)utcb;
-  return;
+
+  L4_msg_tag res(L4_msg_tag::Schedule);
+
+  if (EXPECT_TRUE(self.op() & L4_obj_ref::Ipc_send))
+  {
+    switch (utcb->values[0])
+    {
+      case Test: res = test(); break;
+      default:   res = commit_result(-L4_err::ENosys); break;
+    }
+  }
+
+  f->tag(res);
 }
 
 namespace {

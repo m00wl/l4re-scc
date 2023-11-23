@@ -37,6 +37,7 @@
 
 namespace L4 {
 class Scheduler;
+class Sched_context;
 }
 
 /**
@@ -282,12 +283,18 @@ namespace L4Re
     L4::Cap<L4::Scheduler> scheduler() const noexcept
     { return L4::Cap<L4::Scheduler>(_env.scheduler); }
 
+    L4::Cap<L4::Sched_context> sched_context() const noexcept
+    { return L4::Cap<L4::Sched_context>(_env.sched_context); }
+
     /**
      * Set the scheduler capability.
      * \param c is the capability to be set as scheduler.
      */
     void scheduler(L4::Cap<L4::Scheduler> const &c) noexcept
     { _env.scheduler = c.cap(); }
+
+    void sched_context(L4::Cap<L4::Sched_context> const &c) noexcept
+    { _env.sched_context = c.cap(); }
 
     /**
      * Set the pointer to the first Cap_entry in the initial objects array.
