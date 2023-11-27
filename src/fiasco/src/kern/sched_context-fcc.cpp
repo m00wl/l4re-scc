@@ -51,6 +51,8 @@ private:
   Unsigned64 _left;
 
   Context *_context;
+  Ram_quota *_quota;
+
   static Per_cpu<Sched_context *> kernel_sc;
 };
 
@@ -70,38 +72,22 @@ IMPLEMENTATION [sched_fcc]:
 
 DEFINE_PER_CPU Per_cpu<Sched_context *> Sched_context::kernel_sc;
 
-/**
- * Constructor
- */
 PUBLIC
-Sched_context::Sched_context()
+Sched_context::Sched_context(Ram_quota *q)
 : _prio(Config::Default_prio),
   _quantum(Config::Default_time_slice),
   _left(Config::Default_time_slice),
-  _context(nullptr) //TOMO: this is highly unsafe.
+  _context(nullptr), //TOMO: this is highly unsafe.
+  _quota(q)
 {}
-
-//PUBLIC
-//Sched_context::Sched_context(Unsigned8 prio)
-//: _prio(prio),
-//  _quantum(Config::Default_time_slice),
-//  _left(Config::Default_time_slice),
-//  _context(nullptr) //TOMO: this is highly unsafe.
-//{}
-//
-//PUBLIC
-//Sched_context::Sched_context(Unsigned8 prio, Unsigned64 quantum)
-//: _prio(prio),
-//  _quantum(quantum),
-//  _left(quantum),
-//  _context(nullptr) //TOMO: this is highly unsafe.
-//{}
 
 PUBLIC
 Sched_context::~Sched_context()
-{ printf("WARNING: sched_context was deleted [was attached to thread %p].\n", this->context()); }
+{
+  printf("WARNING: sched_context was deleted [was attached to thread %p].\n", this->context());
+}
 
-PUBLIC //inline
+PUBLIC inline
 void
 Sched_context::operator delete (void *ptr)
 { allocator()->free(reinterpret_cast<Sched_context *>(ptr)); }
@@ -121,20 +107,13 @@ Sched_context::allocator()
 
 PUBLIC static
 Sched_context *
-//Sched_context::create(Ram_quota *q, Unsigned8 prio = Config::Default_prio, Unsigned64 quantum = Config::Default_time_slice)
 Sched_context::create(Ram_quota *q)
 {
-  Auto_quota<Ram_quota> quota(q, sizeof(Sched_context));
-
-  if (EXPECT_FALSE(!quota))
+  void *p = allocator()->q_alloc<Ram_quota>(q);
+  if (!p)
     return 0;
 
-  void *nq = Sched_context::allocator()->alloc();
-  if (EXPECT_FALSE(!nq))
-    return 0;
-
-  quota.release();
-  return new (nq) Sched_context();
+  return new (p) Sched_context(q);
 }
 
 PUBLIC static inline
@@ -293,20 +272,8 @@ namespace {
 static Kobject_iface * FIASCO_FLATTEN
 sched_context_factory(Ram_quota *q, Space *, L4_msg_tag, Utcb const *, int *err)
 {
-  size_t size = sizeof(Sched_context);
-  Auto_quota<Ram_quota> quota(q, size);
-
-  if (EXPECT_FALSE(!quota))
-    return 0;
-
-  Kmem_alloc *a = Kmem_alloc::allocator();
-  void *nq = a->q_alloc(q, Bytes(size));
-  if (EXPECT_FALSE(!nq))
-    return 0;
-
-  quota.release();
   *err = L4_err::ENomem;
-  return new (nq) Sched_context();
+  return Sched_context::create(q);
 }
 
 static inline void __attribute__((constructor)) FIASCO_INIT

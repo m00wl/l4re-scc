@@ -429,7 +429,7 @@ public:
     Label_iommu = -22L,         ///< Protocol ID for IOMMUs
     Label_debugger = -23L,      ///< Protocol ID for the debugger
     Label_smc = -24L,           ///< Protocol ID for ARM SMC calls.
-    Label_sched_context = -25L, ///< Protocol ID for ARM SMC calls.
+    Label_sched_context = -25L, ///< Protocol ID for sched_context objects.
     Max_factory_label = Label_sched_context,
   };
 private:
