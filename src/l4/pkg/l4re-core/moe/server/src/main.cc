@@ -522,9 +522,9 @@ int main(int argc, char**argv)
 
   info.printf("Hello world\n");
 
-  l4_msgtag_t test = L4Re::Env::env()->sched_context()->test();
-  if (l4_msgtag_has_error(test))
-    info.printf("sc syscall had errors! msgtag: %lX\n", test.raw);
+  //l4_msgtag_t test = L4Re::Env::env()->sched_context()->test();
+  //if (l4_msgtag_has_error(test))
+  //  info.printf("sc syscall had errors! msgtag: %lX\n", test.raw);
 
   l4_msgtag_t res = L4Re::Env::env()->scheduler()
     ->run_thread(L4::Cap<L4::Thread>(L4_BASE_THREAD_CAP), l4_sched_param(0xff));
