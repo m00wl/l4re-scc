@@ -84,7 +84,9 @@ Sched_context::Sched_context(Ram_quota *q)
 PUBLIC
 Sched_context::~Sched_context()
 {
-  printf("WARNING: sched_context was deleted [was attached to thread %p].\n", this->context());
+  printf("WARNING: SC[%p] delete\n", this);
+  printf("|- thread: %p\n", this->context());
+  printf("|- RQ: %s\n", in_ready_queue() ? "Y" : "N");
 }
 
 PUBLIC inline
@@ -216,6 +218,11 @@ void
 Sched_context::replenish()
 { set_left(_quantum); }
 
+PUBLIC inline
+Unsigned64
+Sched_context::quantum()
+{ return _quantum; }
+
 /**
  * Set remaining time quantum of Sched_context
  */
@@ -242,7 +249,7 @@ PRIVATE
 L4_msg_tag
 Sched_context::test()
 {
-  printf("SC SYSCALL!\n");
+  printf("SC[%p]: SYSCALL!\n", this);
   return commit_result(0);
 }
 

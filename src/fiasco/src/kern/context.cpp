@@ -2090,6 +2090,7 @@ Context::_execute_drq(Drq *rq, bool offline_cpu = false)
       else
         //Sched_context::rq.current().ready_enqueue(sched());
         Ready_queue::rq.current().ready_enqueue(sched());
+
       return true;
     }
 

@@ -42,8 +42,6 @@ public:
     if (EXPECT_FALSE (sc->in_ready_queue()))
       return;
 
-    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> ready_queue enqueue: %p [RQ has %d entries].\n", sc, c);
-
     enqueue(sc, true);
   }
 
@@ -54,8 +52,6 @@ public:
     // Don't dequeue threads which aren't enqueued
     if (EXPECT_FALSE (!sc->in_ready_queue()))
       return;
-
-    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> ready_queue dequeue: %p [RQ has %d entries].\n", sc, c);
 
     dequeue(sc);
   }
@@ -121,6 +117,7 @@ Ready_queue::enqueue(Sched_context *sc, bool is_current_sched)
 
   queue[prio].push(sc, is_current_sched ? Queue::Front : Queue::Back);
   c++;
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[%p] enqueue: SC[%p] [RQ has %d entries].\n", this, sc, c);
 }
 
 /**
@@ -143,6 +140,7 @@ Ready_queue::dequeue(Sched_context *sc)
   while (queue[prio_highest].empty() && prio_highest)
     prio_highest--;
   c--;
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[%p] dequeue: SC[%p] [RQ has %d entries].\n", this, sc, c);
 }
       
       
