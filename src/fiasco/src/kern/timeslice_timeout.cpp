@@ -37,11 +37,11 @@ Timeslice_timeout::expired() override
 {
   //Sched_context::Ready_queue &rq = Sched_context::rq.current();
   Ready_queue &rq { Ready_queue::rq.current() };
-  Sched_context *sched = rq.current_sched();
+  Prio_sc *sched = rq.current_sched();
 
   if (sched)
   {
-    sched->replenish();
+    sched->get_quant_sc()->replenish();
     rq.requeue(sched);
     rq.invalidate_sched();
   }

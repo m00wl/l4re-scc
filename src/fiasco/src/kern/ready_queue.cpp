@@ -18,23 +18,23 @@ public:
 
   int c = 0;
 
-  void set_idle(Sched_context *sc)
+  void set_idle(Prio_sc *sc)
   { sc->_prio = Config::Kernel_prio; }
 
-  void enqueue(Sched_context *, bool);
-  void dequeue(Sched_context *);
-  Sched_context *next_to_run() const;
+  void enqueue(Prio_sc *, bool);
+  void dequeue(Prio_sc *);
+  Prio_sc *next_to_run() const;
 
-  void activate(Sched_context *sc)
+  void activate(Prio_sc *sc)
   { _current_sched = sc; }
-  Sched_context *current_sched() const
+  Prio_sc *current_sched() const
   { return _current_sched; }
 
-  void set_current_sched(Sched_context *sched);
+  void set_current_sched(Prio_sc *sched);
   void invalidate_sched() { activate(0); }
-  bool deblock(Sched_context *sc, Sched_context *crs, bool lazy_q = false);
+  bool deblock(Prio_sc *sc, Prio_sc *crs, bool lazy_q = false);
 
-  void ready_enqueue(Sched_context *sc)
+  void ready_enqueue(Prio_sc *sc)
   {
     assert(cpu_lock.test());
 
@@ -45,7 +45,7 @@ public:
     enqueue(sc, true);
   }
 
-  void ready_dequeue(Sched_context *sc)
+  void ready_dequeue(Prio_sc *sc)
   {
     assert (cpu_lock.test());
 
@@ -56,7 +56,7 @@ public:
     dequeue(sc);
   }
 
-  void switch_sched(Sched_context *from, Sched_context *to)
+  void switch_sched(Prio_sc *from, Prio_sc *to)
   {
     assert (cpu_lock.test());
 
@@ -74,11 +74,11 @@ public:
   Context *schedule_in_progress;
 
 private:
-    typedef cxx::Sd_list<Sched_context> Queue;
+    typedef cxx::Sd_list<Prio_sc> Queue;
     Unsigned8 prio_highest { 0 };
     Queue queue[priorities];
 
-    Sched_context *_current_sched;
+    Prio_sc *_current_sched;
 
 };
 
@@ -93,7 +93,7 @@ IMPLEMENTATION:
 DEFINE_PER_CPU Per_cpu<Ready_queue> Ready_queue::rq;
 
 IMPLEMENT inline
-Sched_context *
+Prio_sc *
 Ready_queue::next_to_run() const
 { return queue[prio_highest].front(); }
 
@@ -102,7 +102,7 @@ Ready_queue::next_to_run() const
  */
 IMPLEMENT
 void
-Ready_queue::enqueue(Sched_context *sc, bool is_current_sched)
+Ready_queue::enqueue(Prio_sc *sc, bool is_current_sched)
 {
   assert(cpu_lock.test());
 
@@ -110,7 +110,7 @@ Ready_queue::enqueue(Sched_context *sc, bool is_current_sched)
   if (EXPECT_FALSE (sc->in_ready_queue()))
     return;
 
-  Unsigned8 prio = sc->prio();
+  Unsigned8 prio = sc->get_prio();
 
   if (prio > prio_highest)
     prio_highest = prio;
@@ -125,7 +125,7 @@ Ready_queue::enqueue(Sched_context *sc, bool is_current_sched)
  */
 IMPLEMENT inline NEEDS ["cpu_lock.h", <cassert>, "std_macros.h"]
 void
-Ready_queue::dequeue(Sched_context *sc)
+Ready_queue::dequeue(Prio_sc *sc)
 {
   assert (cpu_lock.test());
 
@@ -133,7 +133,7 @@ Ready_queue::dequeue(Sched_context *sc)
   if (EXPECT_FALSE (!sc->in_ready_queue()))
     return;
 
-  Unsigned8 prio = sc->prio();
+  Unsigned8 prio = sc->get_prio();
 
   queue[prio].remove(sc);
 
@@ -146,45 +146,45 @@ Ready_queue::dequeue(Sched_context *sc)
       
 PUBLIC inline
 void
-Ready_queue::requeue(Sched_context *sc)
+Ready_queue::requeue(Prio_sc *sc)
 {
   if (!sc->in_ready_queue())
     enqueue(sc, false);
   else
-    queue[sc->prio()].rotate_to(*++Queue::iter(sc));
+    queue[sc->get_prio()].rotate_to(*++Queue::iter(sc));
 }
       
 PUBLIC inline
 void
-Ready_queue::deblock_refill(Sched_context *)
+Ready_queue::deblock_refill(Prio_sc *)
 {}
 
 /**
- *  * Set currently active global Sched_context.
+ *  * Set currently active global Prio_sc.
  *   */
 IMPLEMENT
 void
-Ready_queue::set_current_sched(Sched_context *sched)
+Ready_queue::set_current_sched(Prio_sc *sched)
 {
   assert (sched);
   // Save remainder of previous timeslice or refresh it, unless it had
   // been invalidated
   Timeout * const tt = timeslice_timeout.current();
   Unsigned64 clock = Timer::system_clock();
-  if (Sched_context *s = current_sched())
+  if (Prio_sc *s = current_sched())
   {
     Signed64 left = tt->get_timeout(clock);
     if (left > 0)
-      s->set_left(left);
+      s->get_quant_sc()->set_left(left);
     else
-      s->replenish();
+      s->get_quant_sc()->replenish();
 
     LOG_SCHED_SAVE(s);
   }
 
   // Program new end-of-timeslice timeout
   tt->reset();
-  tt->set(clock + sched->left(), current_cpu());
+  tt->set(clock + sched->get_quant_sc()->get_left(), current_cpu());
 
   // Make this timeslice current
   activate(sched);
@@ -203,8 +203,8 @@ Ready_queue::set_current_sched(Sched_context *sched)
  * scheduling context via `switch_to_locked()`. This is required to ensure that
  * the scheduler does not forget about the scheduling context.
  *
- * \param sc      Sched_context that shall be deblocked.
- * \param crs     Sched_context of the currently running context.
+ * \param sc      Prio_sc that shall be deblocked.
+ * \param crs     Prio_sc of the currently running context.
  * \param lazy_q  Queue lazily if applicable.
  *
  * \returns Whether a reschedule is necessary (deblocked scheduling context
@@ -212,11 +212,11 @@ Ready_queue::set_current_sched(Sched_context *sched)
  */
 IMPLEMENT inline NEEDS[<cassert>]
 bool
-Ready_queue::deblock(Sched_context *sc, Sched_context *crs, bool lazy_q)
+Ready_queue::deblock(Prio_sc *sc, Prio_sc *crs, bool lazy_q)
 {
   assert(cpu_lock.test());
 
-  Sched_context *cs = current_sched();
+  Prio_sc *cs = current_sched();
   bool res = true;
   if (sc == cs)
   {

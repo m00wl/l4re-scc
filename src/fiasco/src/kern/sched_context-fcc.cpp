@@ -15,13 +15,29 @@ INTERFACE [sched_fcc]:
 #include "ref_obj.h"
 
 class Context;
+class Prio_sc;
+class Quant_sc;
 
 class Sched_context
-: public cxx::D_list_item,
-  public cxx::Dyn_castable<Sched_context, Kobject>,
+: public cxx::Dyn_castable<Sched_context, Kobject>,
   public Ref_cnt_obj
 {
-  MEMBER_OFFSET();
+public:
+  typedef Slab_cache Self_alloc;
+  // undefine default new operator.
+  void *operator new(size_t);
+
+private:
+  enum Operation
+  { Test = 0, };
+
+  Ram_quota *_quota;
+};
+
+class Prio_sc
+: public Sched_context,
+  public cxx::D_list_item
+{
   friend class Ready_queue;
 
   union Sp
@@ -31,29 +47,64 @@ class Sched_context
     L4_sched_param_fixed_prio fixed_prio;
   };
 
-  typedef Slab_cache Self_alloc;
-
 public:
-  Context *context() const { return _context; }
-  void set_context(Context *c) { _context = c; }
+  bool in_ready_queue() const
+  { return cxx::Sd_list<Prio_sc>::in_list(this); }
 
-  // undefine default new operator.
-  void *operator new(size_t);
+  bool dominates(Prio_sc *p) const
+  {
+    assert(p);
+    return _prio > p->get_prio();
+  }
+
+  Context *get_context() const
+  { return _context; }
+
+  void set_context(Context *c)
+  { _context = c; }
+
+  Unsigned8 get_prio() const
+  { return _prio; }
+
+  void set_prio(Unsigned8 p)
+  { _prio = p; }
+
+  Quant_sc *get_quant_sc() const
+  { return _quant_sc; }
+
+  void set_quant_sc(Quant_sc *q)
+  {
+    assert(q);
+    _quant_sc = q;
+  }
 
 private:
-  enum Operation
-  {
-    Test = 0,
-  };
-
+  Context *_context;
   Unsigned8 _prio;
+  Quant_sc *_quant_sc;
+};
+
+class Quant_sc : public Sched_context
+{
+public:
+  Unsigned64 get_quantum() const
+  { return _quantum; }
+
+  void set_quantum(Unsigned64 q)
+  { _quantum = q; }
+
+  Unsigned64 get_left() const
+  { return _left; }
+
+  void set_left(Unsigned64 l)
+  { _left = l; }
+
+  void replenish()
+  { set_left(_quantum); }
+
+private:
   Unsigned64 _quantum;
   Unsigned64 _left;
-
-  Context *_context;
-  Ram_quota *_quota;
-
-  static Per_cpu<Sched_context *> kernel_sc;
 };
 
 // --------------------------------------------------------------------------
@@ -70,73 +121,37 @@ IMPLEMENTATION [sched_fcc]:
 #include "types.h"
 #include "processor.h"
 
-DEFINE_PER_CPU Per_cpu<Sched_context *> Sched_context::kernel_sc;
+//PRIVATE static
+//Sched_context::Self_alloc *
+//Sched_context::allocator()
+//{ return _sched_context_allocator.slab(); }
 
-PUBLIC
-Sched_context::Sched_context(Ram_quota *q)
-: _prio(Config::Default_prio),
-  _quantum(Config::Default_time_slice),
-  _left(Config::Default_time_slice),
-  _context(nullptr), //TOMO: this is highly unsafe.
-  _quota(q)
-{}
-
-PUBLIC
-Sched_context::~Sched_context()
-{
-  printf("WARNING: SC[%p] delete\n", this);
-  printf("|- thread: %p\n", this->context());
-  printf("|- RQ: %s\n", in_ready_queue() ? "Y" : "N");
-}
-
-PUBLIC inline
-void
-Sched_context::operator delete (void *ptr)
-{ allocator()->free(reinterpret_cast<Sched_context *>(ptr)); }
-
+//PUBLIC inline
+//void
+//Sched_context::operator delete (void *ptr)
+//{ allocator()->free(reinterpret_cast<Sched_context *>(ptr)); }
 
 PUBLIC inline NEEDS[<cstddef>]
 void *
 Sched_context::operator new (size_t, void *b) throw()
 { return b; }
 
-static Kmem_slab_t<Sched_context> _sched_context_allocator("Sched_context");
+PUBLIC
+Sched_context::Sched_context(Ram_quota *q)
+: _quota(q)
+{}
 
-PRIVATE static
-Sched_context::Self_alloc *
-Sched_context::allocator()
-{ return _sched_context_allocator.slab(); }
+PUBLIC
+Sched_context::~Sched_context()
+{ printf("SC[%p]: delete\n", this); }
 
-PUBLIC static
-Sched_context *
-Sched_context::create(Ram_quota *q)
-{
-  void *p = allocator()->q_alloc<Ram_quota>(q);
-  if (!p)
-    return 0;
-
-  return new (p) Sched_context(q);
-}
-
-PUBLIC static inline
-Sched_context *
-Sched_context::get_kernel_sc()
-{ return Sched_context::kernel_sc.current(); }
-
-PUBLIC static inline
-void
-Sched_context::set_kernel_sc(Cpu_number cpu, Sched_context *sc)
-{ Sched_context::kernel_sc.cpu(cpu) = sc; }
-
-/**
- * Return priority of Sched_context
- */
-PUBLIC inline
-unsigned short
-Sched_context::prio() const
-{
-  return _prio;
-}
+//PUBLIC static
+//Sched_context *
+//Sched_context::create(Ram_quota *q)
+//{
+//  void *p = allocator()->q_alloc<Ram_quota>(q);
+//  return p ? new (p) Sched_context(q) : 0;
+//}
 
 PUBLIC static inline
 Mword
@@ -144,106 +159,6 @@ Sched_context::sched_classes()
 {
   return 1UL << (-L4_sched_param_fixed_prio::Class);
 }
-
-PUBLIC static inline
-int
-Sched_context::check_param(L4_sched_param const *_p)
-{
-  Sp const *p = reinterpret_cast<Sp const *>(_p);
-  switch (p->p.sched_class)
-  {
-    case L4_sched_param_fixed_prio::Class:
-      if (!_p->check_length<L4_sched_param_fixed_prio>())
-        return -L4_err::EInval;
-      break;
-
-    default:
-      if (!_p->is_legacy())
-        return -L4_err::ERange;
-      break;
-  }
-
-  return 0;
-}
-
-PUBLIC
-void
-Sched_context::set(L4_sched_param const *_p)
-{
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> changing parameters of this sched_context: %p\n", this);
-  Sp const *p = reinterpret_cast<Sp const *>(_p);
-  if (_p->is_legacy())
-  {
-    // legacy fixed prio
-    _prio = p->legacy_fixed_prio.prio;
-    if (p->legacy_fixed_prio.prio > 255)
-      _prio = 255;
-
-    _quantum = p->legacy_fixed_prio.quantum;
-    if (p->legacy_fixed_prio.quantum == 0)
-      _quantum = Config::Default_time_slice;
-    return;
-  }
-
-  switch (p->p.sched_class)
-  {
-    case L4_sched_param_fixed_prio::Class:
-      _prio = p->fixed_prio.prio;
-      if (p->fixed_prio.prio > 255)
-        _prio = 255;
-
-      _quantum = p->fixed_prio.quantum;
-      if (p->fixed_prio.quantum == 0)
-        _quantum = Config::Default_time_slice;
-      break;
-
-    default:
-      assert(false && "Missing check_param()?");
-      break;
-  }
-}
-
-/**
- * Return remaining time quantum of Sched_context
- */
-PUBLIC inline
-Unsigned64
-Sched_context::left() const
-{
-  return _left;
-}
-
-PUBLIC inline NEEDS[Sched_context::set_left]
-void
-Sched_context::replenish()
-{ set_left(_quantum); }
-
-PUBLIC inline
-Unsigned64
-Sched_context::quantum()
-{ return _quantum; }
-
-/**
- * Set remaining time quantum of Sched_context
- */
-PUBLIC inline
-void
-Sched_context::set_left(Unsigned64 left)
-{
-  _left = left;
-}
-
-PUBLIC inline
-Mword
-Sched_context::in_ready_queue() const
-{
-  return cxx::Sd_list<Sched_context>::in_list(this);
-}
-
-PUBLIC inline
-bool
-Sched_context::dominates(Sched_context *sc)
-{ return prio() > sc->prio(); }
 
 PRIVATE
 L4_msg_tag
@@ -280,7 +195,8 @@ static Kobject_iface * FIASCO_FLATTEN
 sched_context_factory(Ram_quota *q, Space *, L4_msg_tag, Utcb const *, int *err)
 {
   *err = L4_err::ENomem;
-  return Sched_context::create(q);
+  panic("creating SCs from userspace is not supported yet.");
+  //return Sched_context::create(q);
 }
 
 static inline void __attribute__((constructor)) FIASCO_INIT
@@ -291,3 +207,116 @@ register_factory()
 }
 
 }
+
+static Kmem_slab_t<Prio_sc> _prio_sc_allocator("Prio_sc");
+
+PRIVATE static
+Prio_sc::Self_alloc *
+Prio_sc::allocator()
+{ return _prio_sc_allocator.slab(); }
+
+PUBLIC inline
+void
+Prio_sc::operator delete (void *ptr)
+{ allocator()->free(reinterpret_cast<Prio_sc *>(ptr)); }
+
+PUBLIC static
+Prio_sc *
+Prio_sc::create(Ram_quota *q)
+{
+  void *p = allocator()->q_alloc<Ram_quota>(q);
+  return p ? new (p) Prio_sc(q) : 0;
+}
+
+PUBLIC
+Prio_sc::Prio_sc(Ram_quota *q)
+: Sched_context(q),
+  _context(nullptr),
+  _prio(Config::Default_prio),
+  _quant_sc(nullptr)
+{}
+
+PUBLIC static inline
+int
+Prio_sc::check_param(L4_sched_param const *_p)
+{
+  Sp const *p = reinterpret_cast<Sp const *>(_p);
+  switch (p->p.sched_class)
+  {
+    case L4_sched_param_fixed_prio::Class:
+      if (!_p->check_length<L4_sched_param_fixed_prio>())
+        return -L4_err::EInval;
+      break;
+
+    default:
+      if (!_p->is_legacy())
+        return -L4_err::ERange;
+      break;
+  }
+
+  return 0;
+}
+
+PUBLIC
+void
+Prio_sc::set(L4_sched_param const *_p)
+{
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> Prio_sc[%p]: set\n", this);
+  Sp const *p = reinterpret_cast<Sp const *>(_p);
+  if (_p->is_legacy())
+  {
+    // legacy fixed prio
+    _prio = p->legacy_fixed_prio.prio;
+    if (p->legacy_fixed_prio.prio > 255)
+      _prio = 255;
+
+    get_quant_sc()->set_quantum(p->legacy_fixed_prio.quantum);
+    if (p->legacy_fixed_prio.quantum == 0)
+      get_quant_sc()->set_quantum(Config::Default_time_slice);
+    return;
+  }
+
+  switch (p->p.sched_class)
+  {
+    case L4_sched_param_fixed_prio::Class:
+      _prio = p->fixed_prio.prio;
+      if (p->fixed_prio.prio > 255)
+        _prio = 255;
+
+      get_quant_sc()->set_quantum(p->fixed_prio.quantum);
+      if (p->fixed_prio.quantum == 0)
+        get_quant_sc()->set_quantum(Config::Default_time_slice);
+      break;
+
+    default:
+      assert(false && "Missing check_param()?");
+      break;
+  }
+}
+
+static Kmem_slab_t<Quant_sc> _quant_sc_allocator("Quant_sc");
+
+PRIVATE static
+Quant_sc::Self_alloc *
+Quant_sc::allocator()
+{ return _quant_sc_allocator.slab(); }
+
+PUBLIC inline
+void
+Quant_sc::operator delete (void *ptr)
+{ allocator()->free(reinterpret_cast<Quant_sc *>(ptr)); }
+
+PUBLIC static
+Quant_sc *
+Quant_sc::create(Ram_quota *q)
+{
+  void *p = allocator()->q_alloc<Ram_quota>(q);
+  return p ? new (p) Quant_sc(q) : 0;
+}
+
+PUBLIC
+Quant_sc::Quant_sc(Ram_quota *q)
+: Sched_context(q),
+  _quantum(Config::Default_time_slice),
+  _left(Config::Default_time_slice)
+{}

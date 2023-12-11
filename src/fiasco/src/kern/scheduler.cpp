@@ -83,7 +83,7 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
   static_assert(sizeof(L4_sched_param_legacy) <= sizeof(L4_sched_param),
                 "Adapt above check");
 
-  int ret = Sched_context::check_param(sched_param);
+  int ret = Prio_sc::check_param(sched_param);
   if (EXPECT_FALSE(ret < 0))
     return commit_result(ret);
 
@@ -140,67 +140,67 @@ PRIVATE
 L4_msg_tag
 Scheduler::sys_run3(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
 {
-  L4_msg_tag tag = f->tag();
-  Ko::Rights rights;
-  L4_snd_item_iter snd_items(utcb, tag.words());
+  //L4_msg_tag tag = f->tag();
+  //Ko::Rights rights;
+  //L4_snd_item_iter snd_items(utcb, tag.words());
 
-  if (!tag.items())
-    return commit_result(-L4_err::EInval);
+  //if (!tag.items())
+  //  return commit_result(-L4_err::EInval);
 
-  Space *const space = ::current()->space();
-  if (!space)
-    __builtin_unreachable();
+  //Space *const space = ::current()->space();
+  //if (!space)
+  //  __builtin_unreachable();
 
-  Thread *thread;
-  thread = Ko::deref_next<Thread>(&tag, utcb, snd_items, space, &rights);
-  if (!thread)
-    return tag;
+  //Thread *thread;
+  //thread = Ko::deref_next<Thread>(&tag, utcb, snd_items, space, &rights);
+  //if (!thread)
+  //  return tag;
 
-  Sched_context *sc;
-  sc = Ko::deref_next<Sched_context>(&tag, utcb, snd_items, space, &rights);
-  if (!sc)
-    return tag;
+  //Prio_sc *sc;
+  //sc = Ko::deref_next<Prio_sc>(&tag, utcb, snd_items, space, &rights);
+  //if (!sc)
+  //  return tag;
 
-  if (0)
-  {
-    printf("tr: %p\n", thread);
-    printf("sc: %p\n", sc);
-    printf("tr->sc: %p\n", thread->sched());
-    printf("tr->sc.rq: %s\n", thread->sched()->in_ready_queue() ? "y" : "n");
-    printf("sc->tr: %p\n", sc->context());
-  }
+  //if (0)
+  //{
+  //  printf("tr: %p\n", thread);
+  //  printf("sc: %p\n", sc);
+  //  printf("tr->sc: %p\n", thread->sched());
+  //  printf("tr->sc.rq: %s\n", thread->sched()->in_ready_queue() ? "y" : "n");
+  //  printf("sc->tr: %p\n", sc->get_context());
+  //}
 
-  Sched_context *old_sc = thread->sched();
-  if (old_sc)
-  {
-    // TOMO: WARNING. resource leak here.
-    // At the moment, we don't know if old_sc was created manually in the kernel or dynamically from userspace.
-    // Therefore, we also don't know whether we should dec_ref() the old_sc,
-    // therefore old_sc might not be deleted later and we have a potential resource leak here.
-    // To fix this, we would need to adapt the entire userspace and convert libloader/moe/pthread/etc. to dynamic (explicit) sc allocation.
-    Ready_queue &rq { Ready_queue::rq.cpu(thread->home_cpu()) };
-    rq.switch_sched(old_sc, sc);
-    // TOMO: maybe set to idle thread instead? (should be safer...)
-    old_sc->set_context(nullptr);
-  }
+  //Prio_sc *old_sc = thread->sched();
+  //if (old_sc)
+  //{
+  //  // TOMO: WARNING. resource leak here.
+  //  // At the moment, we don't know if old_sc was created manually in the kernel or dynamically from userspace.
+  //  // Therefore, we also don't know whether we should dec_ref() the old_sc,
+  //  // therefore old_sc might not be deleted later and we have a potential resource leak here.
+  //  // To fix this, we would need to adapt the entire userspace and convert libloader/moe/pthread/etc. to dynamic (explicit) sc allocation.
+  //  Ready_queue &rq { Ready_queue::rq.cpu(thread->home_cpu()) };
+  //  rq.switch_sched(old_sc, sc);
+  //  // TOMO: maybe set to idle thread instead? (should be safer...)
+  //  old_sc->set_context(nullptr);
+  //}
 
-  thread->set_sched(sc);
-  sc->set_context(thread);
+  //thread->set_sched(sc);
+  //sc->set_context(thread);
 
-  // we fabricate a migration info and go the established way.
-  Thread::Migration info;
+  //// we fabricate a migration info and go the established way.
+  //Thread::Migration info;
 
-  // sched_contexts are not concerned with core migration, therefore:
-  info.cpu = ::current_cpu();
+  //// sched_contexts are not concerned with core migration, therefore:
+  //info.cpu = ::current_cpu();
 
-  // extract scheduling information from the given sched_context.
-  L4_sched_param_fixed_prio sched_param;
-  sched_param.sched_class = L4_sched_param_fixed_prio::Class;
-  sched_param.quantum = sc->quantum();
-  sched_param.prio = sc->prio();
-  info.sp = &sched_param;
+  //// extract scheduling information from the given sched_context.
+  //L4_sched_param_fixed_prio sched_param;
+  //sched_param.sched_class = L4_sched_param_fixed_prio::Class;
+  //sched_param.quantum = sc->get_quant_sc()->get_quantum();
+  //sched_param.prio = sc->get_prio();
+  //info.sp = &sched_param;
 
-  thread->migrate(&info);
+  //thread->migrate(&info);
 
   return commit_result(0);
 }

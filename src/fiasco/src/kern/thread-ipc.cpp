@@ -344,7 +344,7 @@ Thread::check_sender(Thread *sender, bool timeout)
   // idea: do_ipc (with partner) is always initiated from the sender
   // means: we always run with the sender's sched context.
   // means: we can take prio and stuff from SC_Scheduler::get_current.
-  sender->sender_enqueue(sender_list(), sender->sched()->prio());
+  sender->sender_enqueue(sender_list(), sender->sched()->get_prio());
   //sender->sender_enqueue(sender_list(), SC_Scheduler::get_current()->prio());
   vcpu_set_irq_pending();
   return Check_sender::Queued;

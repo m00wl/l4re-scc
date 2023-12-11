@@ -313,13 +313,22 @@ void
 Thread::alloc_sched_context()
 {
   // create.
-  Sched_context *sc = Sched_context::create(_quota);
-  assert(sc);
-  sc->inc_ref();
+  //Sched_context *sc = Sched_context::create(_quota);
+  //assert(sc);
+  //sc->inc_ref();
+  Prio_sc *psc = Prio_sc::create(_quota);
+  assert(psc);
+  psc->inc_ref();
+  Quant_sc *qsc = Quant_sc::create(_quota);
+  assert(qsc);
+  qsc->inc_ref();
 
   // set pointers.
-  this->set_sched(sc);
-  sc->set_context(this);
+  //this->set_sched(sc);
+  //sc->set_context(this);
+  this->set_sched(psc);
+  psc->set_context(this);
+  psc->set_quant_sc(qsc);
 }
 
 // IPC-gate deletion stuff ------------------------------------
@@ -528,7 +537,7 @@ Thread::do_kill()
     //if (sched() != sched_context())
     //  switch_sched(sched_context(), &rq);
 
-    if (!rq.current_sched() || rq.current_sched()->context() == this)
+    if (!rq.current_sched() || rq.current_sched()->get_context() == this)
       rq.set_current_sched(current()->sched());
   }
 
@@ -654,7 +663,7 @@ Thread::set_sched_params(L4_sched_param const *p)
 {
   //(void)p;
   //panic("Thread::set_sched_params: sc not available here\n");
-  Sched_context *sc = this->sched();
+  Prio_sc *sc = this->sched();
 
   // this can actually access the ready queue of a CPU that is offline remotely
   //Sched_context::Ready_queue &rq = Sched_context::rq.cpu(home_cpu());
@@ -663,7 +672,7 @@ Thread::set_sched_params(L4_sched_param const *p)
   rq.dequeue(sc);
 
   sc->set(p);
-  sc->replenish();
+  sc->get_quant_sc()->replenish();
 
   //if (sc == SC_Scheduler::get_current())
   //  SC_Scheduler::set_current(sc);
@@ -1071,9 +1080,10 @@ Thread::migrate_away(Migration *inf, bool remote)
     }
 
   //Sched_context *sc = sched_context();
-  Sched_context *sc = sched();
+  //Sched_context *sc = sched();
+  Prio_sc *sc = sched();
   sc->set(inf->sp);
-  sc->replenish();
+  sc->get_quant_sc()->replenish();
   //set_sched(sc);
 
   state_add_dirty(Thread_finish_migration);
@@ -1313,9 +1323,9 @@ Thread::migrate_away(Migration *inf, bool remote)
       if (_pending_rq.queued())
         check (q.dequeue(&_pending_rq));
 
-      Sched_context *sc = sched();
+      Prio_sc *sc = sched();
       sc->set(inf->sp);
-      sc->replenish();
+      sc->get_quant_sc()->replenish();
       //set_sched(sc);
 
       Mem::mp_wmb();

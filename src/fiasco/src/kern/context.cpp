@@ -26,6 +26,7 @@ class Context;
 class Kobject_iface;
 
 class Sched_context;
+class Prio_sc;
 class Ready_queue;
 
 class Context_ptr
@@ -325,7 +326,8 @@ private:
   // anonymous reference to them as we do not need them ourselves, but
   // we aggregate them for performance reasons.
   //Sched_context _sched_context;
-  Sched_context *_sched;
+  //Sched_context *_sched;
+  Prio_sc *_sched;
 
   // Pointer to floating point register state
   Fpu_state _fpu_state;
@@ -721,7 +723,7 @@ Context::lock_cnt() const
 //}
 PUBLIC
 void
-Context::switch_sched(Sched_context *next, Ready_queue *queue)
+Context::switch_sched(Prio_sc *next, Ready_queue *queue)
 {
   queue->switch_sched(sched(), next);
   set_sched(next);
@@ -793,7 +795,7 @@ Context::schedule()
 
   for (;;)
     {
-      next_to_run = rq->next_to_run()->context();
+      next_to_run = rq->next_to_run()->get_context();
 
       // Ensure ready-list sanity
       assert (next_to_run);
@@ -859,7 +861,7 @@ Context::schedule_if(bool s)
  * @return Active Sched_context
  */
 PUBLIC inline
-Sched_context *
+Prio_sc *
 Context::sched() const
 {
   return _sched;
@@ -871,7 +873,7 @@ Context::sched() const
  */
 PUBLIC inline
 void
-Context::set_sched(Sched_context * const sched)
+Context::set_sched(Prio_sc * const sched)
 {
   _sched = sched;
 }
@@ -891,7 +893,7 @@ Context::update_ready_list()
   //panic("c: update_ready_list not available\n");
   assert (this == current());
 
-  if ((state() & Thread_ready_mask) && sched()->left())
+  if ((state() & Thread_ready_mask) && sched()->get_quant_sc()->get_left())
     //Sched_context::rq.current().ready_enqueue(sched());
     Ready_queue::rq.current().ready_enqueue(sched());
 }

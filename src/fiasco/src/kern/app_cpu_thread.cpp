@@ -87,7 +87,7 @@ App_cpu_thread::bootstrap(Mword resume)
   if (!resume)
     {
       kernel_context(ccpu, this);
-      Sched_context::set_kernel_sc(home_cpu(), sched());
+      //Sched_context::set_kernel_sc(home_cpu(), sched());
       //Sched_context::rq.current().set_idle(this->sched());
       Ready_queue::rq.current().set_idle(this->sched());
 
