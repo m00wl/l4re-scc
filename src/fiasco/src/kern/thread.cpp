@@ -316,19 +316,35 @@ Thread::alloc_sched_context()
   //Sched_context *sc = Sched_context::create(_quota);
   //assert(sc);
   //sc->inc_ref();
+
+  //Prio_sc *psc = Prio_sc::create(_quota);
+  //assert(psc);
+  //psc->inc_ref();
+  //Quant_sc *qsc = Quant_sc::create(_quota);
+  //assert(qsc);
+  //qsc->inc_ref();
+
   Prio_sc *psc = Prio_sc::create(_quota);
   assert(psc);
   psc->inc_ref();
-  Quant_sc *qsc = Quant_sc::create(_quota);
-  assert(qsc);
-  qsc->inc_ref();
+  Budget_sc *bsc = Budget_sc::create(_quota);
+  assert(bsc);
+  bsc->inc_ref();
 
   // set pointers.
   //this->set_sched(sc);
   //sc->set_context(this);
+
+  //this->set_sched(psc);
+  //psc->set_context(this);
+  //psc->set_quant_sc(qsc);
+
   this->set_sched(psc);
   psc->set_context(this);
-  psc->set_quant_sc(qsc);
+  psc->set_budget_sc(bsc);
+  bsc->set_prio_sc(psc);
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> C[%p]---PSC[%p]---BSC[%p]\n", this, psc, bsc);
+  //bsc->calc_and_schedule_next_repl();
 }
 
 // IPC-gate deletion stuff ------------------------------------
@@ -672,7 +688,9 @@ Thread::set_sched_params(L4_sched_param const *p)
   rq.dequeue(sc);
 
   sc->set(p);
-  sc->get_quant_sc()->replenish();
+  //sc->get_quant_sc()->replenish();
+  sc->get_budget_sc()->replenish();
+  sc->get_budget_sc()->calc_and_schedule_next_repl();
 
   //if (sc == SC_Scheduler::get_current())
   //  SC_Scheduler::set_current(sc);
@@ -1083,7 +1101,9 @@ Thread::migrate_away(Migration *inf, bool remote)
   //Sched_context *sc = sched();
   Prio_sc *sc = sched();
   sc->set(inf->sp);
-  sc->get_quant_sc()->replenish();
+  //sc->get_quant_sc()->replenish();
+  sc->get_budget_sc()->replenish();
+  sc->get_budget_sc()->calc_and_schedule_next_repl();
   //set_sched(sc);
 
   state_add_dirty(Thread_finish_migration);
@@ -1325,7 +1345,9 @@ Thread::migrate_away(Migration *inf, bool remote)
 
       Prio_sc *sc = sched();
       sc->set(inf->sp);
-      sc->get_quant_sc()->replenish();
+      //sc->get_quant_sc()->replenish();
+      sc->get_budget_sc()->replenish();
+      sc->get_budget_sc()->calc_and_schedule_next_repl();
       //set_sched(sc);
 
       Mem::mp_wmb();

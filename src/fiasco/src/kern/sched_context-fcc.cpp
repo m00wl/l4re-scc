@@ -17,6 +17,7 @@ INTERFACE [sched_fcc]:
 class Context;
 class Prio_sc;
 class Quant_sc;
+class Budget_sc;
 
 class Sched_context
 : public cxx::Dyn_castable<Sched_context, Kobject>,
@@ -26,6 +27,9 @@ public:
   typedef Slab_cache Self_alloc;
   // undefine default new operator.
   void *operator new(size_t);
+
+  Ram_quota *get_quota() const
+  { return _quota; }
 
 private:
   enum Operation
@@ -69,19 +73,26 @@ public:
   void set_prio(Unsigned8 p)
   { _prio = p; }
 
-  Quant_sc *get_quant_sc() const
-  { return _quant_sc; }
+  //Quant_sc *get_quant_sc() const
+  //{ return _quant_sc; }
 
-  void set_quant_sc(Quant_sc *q)
-  {
-    assert(q);
-    _quant_sc = q;
-  }
+  //void set_quant_sc(Quant_sc *q)
+  //{
+  //  assert(q);
+  //  _quant_sc = q;
+  //}
+
+  Budget_sc *get_budget_sc() const
+  { return _budget_sc; }
+
+  void set_budget_sc(Budget_sc *sc)
+  { _budget_sc = sc; }
 
 private:
   Context *_context;
   Unsigned8 _prio;
-  Quant_sc *_quant_sc;
+  //Quant_sc *_quant_sc;
+  Budget_sc *_budget_sc;
 };
 
 class Quant_sc : public Sched_context
@@ -107,6 +118,54 @@ private:
   Unsigned64 _left;
 };
 
+class Budget_sc : public Sched_context
+{
+public:
+  Unsigned64 get_budget() const
+  { return _budget; }
+
+  void set_budget(Unsigned64 b)
+  { _budget = b; }
+
+  Unsigned64 get_period() const
+  { return _period; }
+
+  void set_period(Unsigned64 p)
+  { _period = p; }
+
+  Unsigned64 get_left() const
+  { return _left; }
+
+  void set_left(Unsigned64 l)
+  { _left = l; }
+
+  Prio_sc *get_prio_sc() const
+  { return _prio_sc; }
+
+  void set_prio_sc(Prio_sc *sc)
+  { _prio_sc = sc; }
+
+private:
+  class Budget_timeout : public Timeout
+  {
+  public:
+    Budget_timeout(Budget_sc *sc) : _sc(sc)
+    {}
+
+  private:
+    bool expired() override;
+    Budget_sc *_sc;
+  };
+
+  Unsigned64 _budget;
+  Unsigned64 _period;
+  Unsigned64 _left;
+  Unsigned64 _next_repl;
+
+  Prio_sc *_prio_sc;
+  Budget_timeout _repl_timeout;
+};
+
 // --------------------------------------------------------------------------
 IMPLEMENTATION [sched_fcc]:
 
@@ -120,6 +179,7 @@ IMPLEMENTATION [sched_fcc]:
 #include "logdefs.h"
 #include "types.h"
 #include "processor.h"
+#include "ready_queue.h"
 
 //PRIVATE static
 //Sched_context::Self_alloc *
@@ -218,7 +278,10 @@ Prio_sc::allocator()
 PUBLIC inline
 void
 Prio_sc::operator delete (void *ptr)
-{ allocator()->free(reinterpret_cast<Prio_sc *>(ptr)); }
+{
+  Prio_sc *sc = reinterpret_cast<Prio_sc *>(ptr);
+  allocator()->q_free<Ram_quota>(sc->get_quota(), sc);
+}
 
 PUBLIC static
 Prio_sc *
@@ -233,7 +296,7 @@ Prio_sc::Prio_sc(Ram_quota *q)
 : Sched_context(q),
   _context(nullptr),
   _prio(Config::Default_prio),
-  _quant_sc(nullptr)
+  _budget_sc(nullptr)
 {}
 
 PUBLIC static inline
@@ -270,9 +333,11 @@ Prio_sc::set(L4_sched_param const *_p)
     if (p->legacy_fixed_prio.prio > 255)
       _prio = 255;
 
-    get_quant_sc()->set_quantum(p->legacy_fixed_prio.quantum);
+    //get_quant_sc()->set_quantum(p->legacy_fixed_prio.quantum);
+    get_budget_sc()->set_budget(p->legacy_fixed_prio.quantum);
     if (p->legacy_fixed_prio.quantum == 0)
-      get_quant_sc()->set_quantum(Config::Default_time_slice);
+      //get_quant_sc()->set_quantum(Config::Default_time_slice);
+      get_budget_sc()->set_budget(Config::Default_time_slice);
     return;
   }
 
@@ -283,9 +348,11 @@ Prio_sc::set(L4_sched_param const *_p)
       if (p->fixed_prio.prio > 255)
         _prio = 255;
 
-      get_quant_sc()->set_quantum(p->fixed_prio.quantum);
+      //get_quant_sc()->set_quantum(p->fixed_prio.quantum);
+      get_budget_sc()->set_budget(p->fixed_prio.quantum);
       if (p->fixed_prio.quantum == 0)
-        get_quant_sc()->set_quantum(Config::Default_time_slice);
+        //get_quant_sc()->set_quantum(Config::Default_time_slice);
+        get_budget_sc()->set_budget(Config::Default_time_slice);
       break;
 
     default:
@@ -304,7 +371,10 @@ Quant_sc::allocator()
 PUBLIC inline
 void
 Quant_sc::operator delete (void *ptr)
-{ allocator()->free(reinterpret_cast<Quant_sc *>(ptr)); }
+{
+  Quant_sc *sc = reinterpret_cast<Quant_sc *>(ptr);
+  allocator()->q_free<Ram_quota>(sc->get_quota(),  sc);
+}
 
 PUBLIC static
 Quant_sc *
@@ -320,3 +390,122 @@ Quant_sc::Quant_sc(Ram_quota *q)
   _quantum(Config::Default_time_slice),
   _left(Config::Default_time_slice)
 {}
+
+static Kmem_slab_t<Budget_sc> _budget_sc_allocator("Budget_sc");
+
+PRIVATE static
+Budget_sc::Self_alloc *
+Budget_sc::allocator()
+{ return _budget_sc_allocator.slab(); }
+
+PUBLIC inline
+void
+Budget_sc::operator delete (void *ptr)
+{
+  Budget_sc *sc = reinterpret_cast<Budget_sc *>(ptr);
+  allocator()->q_free<Ram_quota>(sc->get_quota(), sc);
+}
+
+PUBLIC static
+Budget_sc *
+Budget_sc::create(Ram_quota *q)
+{
+  void *p = allocator()->q_alloc<Ram_quota>(q);
+  return p ? new (p) Budget_sc(q) : 0;
+}
+
+PUBLIC
+Budget_sc::Budget_sc(Ram_quota *q)
+: Sched_context(q),
+  _budget(Config::Default_time_slice),
+  _period(Config::Default_time_slice),
+  _left(Config::Default_time_slice),
+  _next_repl(0),
+  _prio_sc(0),
+  _repl_timeout(this)
+{}
+
+IMPLEMENT
+bool
+Budget_sc::Budget_timeout::expired()
+{
+  if (M_TIMER_DEBUG) printf("TIMER> BSC[%p]: replenishment timeout expired\n", _sc);
+  return _sc->period_expired();
+}
+
+PRIVATE
+void
+Budget_sc::calc_next_repl()
+{
+  Unsigned64 now = Timer::system_clock();
+  if (now < _next_repl)
+    return;
+
+  Unsigned64 diff = now - _next_repl;
+  unsigned n = diff / _period;
+
+  _next_repl += (n + 1) * _period;
+}
+
+PRIVATE
+void
+Budget_sc::program_next_repl_timeout(Cpu_number cpu)
+{
+  if (_repl_timeout.is_set())
+    _repl_timeout.reset();
+  if (M_TIMER_DEBUG) printf("TIMER> BSC[%p]: setting replenishment timeout @ %llu\n", this, _next_repl);
+  _repl_timeout.set(_next_repl, cpu);
+}
+
+PUBLIC
+void
+Budget_sc::calc_and_schedule_next_repl()
+{
+  calc_next_repl();
+  program_next_repl_timeout(current_cpu());
+}
+
+PUBLIC
+void
+Budget_sc::replenish()
+{ set_left(_budget); }
+
+PUBLIC
+void
+Budget_sc::timeslice_expired()
+{
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> BSC[%p]: timeslice_expired\n", this);
+  set_left(0);
+}
+
+PUBLIC
+bool
+Budget_sc::period_expired()
+{
+  //if (M_SCHEDULER_DEBUG) printf("SCHEDULER> BSC[%p]: period_expired\n", this);
+  replenish();
+  calc_and_schedule_next_repl();
+
+  Ready_queue &rq { Ready_queue::rq.current() };
+  Prio_sc *curr_sc = rq.current_sched();
+
+  if ((curr_sc != _prio_sc) && !_prio_sc->in_ready_queue())
+    rq.ready_enqueue(_prio_sc);
+
+  if (curr_sc && (curr_sc->get_budget_sc() == this))
+  {
+    Timeout *const tt = timeslice_timeout.current();
+    Unsigned64 clock = Timer::system_clock();
+    tt->reset();
+    if (M_SCHEDULER_DEBUG)
+    {
+      printf("SCHEDULER> we replenished the currently running thread.\n");
+      printf("TIMER> setting timeslice timeout @ %llu\n", clock + _left);
+    }
+    tt->set(clock + _left, current_cpu());
+  }
+
+  // reschedule, if the replenished thread can preempt the current thread.
+  return true;
+}
+

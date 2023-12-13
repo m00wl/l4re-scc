@@ -85,6 +85,8 @@ Kernel_thread::bootstrap()
 
   Timer::init_system_clock();
   //Sched_context::rq.current().set_idle(this->sched());
+  alloc_sched_context();
+  sched()->get_budget_sc()->calc_and_schedule_next_repl();
   Ready_queue::rq.current().set_idle(this->sched());
 
   Kernel_task::kernel_task()->make_current();

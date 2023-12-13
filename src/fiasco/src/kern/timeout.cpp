@@ -206,7 +206,7 @@ Timeout::set(Unsigned64 clock, Cpu_number cpu)
   assert (!is_set());
 
   _wakeup = clock;
-  if (M_TIMER_DEBUG) printf("TIMER> setting thread timeout @ %llu\n", clock);
+  //if (M_TIMER_DEBUG) printf("TIMER> setting a timeout @ %llu\n", clock);
   Timeout_q::timeout_queue.cpu(cpu).enqueue(this);
 }
 

@@ -175,16 +175,21 @@ Ready_queue::set_current_sched(Prio_sc *sched)
   {
     Signed64 left = tt->get_timeout(clock);
     if (left > 0)
-      s->get_quant_sc()->set_left(left);
+      s->get_budget_sc()->set_left(left);
     else
-      s->get_quant_sc()->replenish();
+    {
+      //s->get_quant_sc()->replenish();
+      printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>> BSC[%p]: budget overrun\n", s);
+      s->get_budget_sc()->set_left(0);
+    }
 
     LOG_SCHED_SAVE(s);
   }
 
   // Program new end-of-timeslice timeout
   tt->reset();
-  tt->set(clock + sched->get_quant_sc()->get_left(), current_cpu());
+  if (M_TIMER_DEBUG) printf("TIMER> setting timeslice timeout @ %llu\n", clock + sched->get_budget_sc()->get_left());
+  tt->set(clock + sched->get_budget_sc()->get_left(), current_cpu());
 
   // Make this timeslice current
   activate(sched);

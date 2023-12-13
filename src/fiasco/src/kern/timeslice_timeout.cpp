@@ -41,9 +41,13 @@ Timeslice_timeout::expired() override
 
   if (sched)
   {
-    sched->get_quant_sc()->replenish();
-    rq.requeue(sched);
+    sched->get_budget_sc()->timeslice_expired();
+    // we dequeue the SC here, because we are out of budget and need to make room for other lower-prio threads.
+    // the SCs repl timeout will enqueue again later.
+    //sched->get_quant_sc()->replenish();
+    //rq.requeue(sched);
     rq.invalidate_sched();
+    rq.ready_dequeue(sched);
   }
 
   return true;

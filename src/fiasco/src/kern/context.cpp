@@ -893,7 +893,7 @@ Context::update_ready_list()
   //panic("c: update_ready_list not available\n");
   assert (this == current());
 
-  if ((state() & Thread_ready_mask) && sched()->get_quant_sc()->get_left())
+  if ((state() & Thread_ready_mask) && sched()->get_budget_sc()->get_left())
     //Sched_context::rq.current().ready_enqueue(sched());
     Ready_queue::rq.current().ready_enqueue(sched());
 }
@@ -924,6 +924,7 @@ Context::activate()
 {
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> context %p: activated\n", this);
   auto guard = lock_guard(cpu_lock);
+  sched()->get_budget_sc()->calc_and_schedule_next_repl();
   if (xcpu_state_change(~0UL, Thread_ready, true))
     current()->switch_to_locked(this);
 }
@@ -1016,6 +1017,7 @@ PROTECTED //inline NEEDS ["assert.h", Context::switch_handle_drq]
 Context::Switch FIASCO_WARN_RESULT
 Context::schedule_switch_to_locked(Context *t)
 {
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> next to run: C[%p]---PSC[%p]---BSC[%p]\n", t, t->sched(), t->sched()->get_budget_sc());
   //(void)t;
   //panic("c: schedule_switch_to_locked not available\n");
   // Must be called with CPU lock held
@@ -1498,7 +1500,6 @@ Context::drq(Drq *drq, Drq::Request_func *func, void *arg,
   //LOG_MSG_3VAL(src, "<drq", src->state(), Mword(this), 0);
   while (wait == Drq::Wait && cur->state() & Thread_drq_wait)
     {
-      printf("We hit the context::drq::schedule()\n");
       // TOMO: this is soft blocking or hard?
       cur->state_del(Thread_ready_mask);
       cur->schedule();

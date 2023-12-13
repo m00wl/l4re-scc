@@ -121,6 +121,7 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
     }
     // TOMO: set prio directly from sched_param.
     thread->alloc_sched_context();
+    //thread->sched()->get_budget_sc()->set_period(100 * Config::Default_time_slice);
     if (M_SCHEDULER_DEBUG) printf("SCHEDULER> thread %p got sched_context %p\n", thread, thread->sched());
     // TOMO: in which ready_queue to put here?
     // maybe this is important for MP implementation.
