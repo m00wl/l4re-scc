@@ -621,7 +621,7 @@ Thread_object::sys_ex_regs(L4_msg_tag const &tag, Utcb *utcb, Utcb *out)
   params.thread = current_thread();
   params.have_recv = (utcb == out);
 
-  if (!sched())
+  if (!get_sched_context())
   {
     if (M_SCHEDULER_DEBUG)
     {
@@ -629,7 +629,6 @@ Thread_object::sys_ex_regs(L4_msg_tag const &tag, Utcb *utcb, Utcb *out)
       printf("SCHEDULER> creating a new one...\n");
     }
     alloc_sched_context();
-    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> thread %p got sched_context %p\n", this, this->sched());
   }
 
   drq(handle_remote_ex_regs, &params);

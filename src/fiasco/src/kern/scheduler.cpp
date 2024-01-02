@@ -83,7 +83,7 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
   static_assert(sizeof(L4_sched_param_legacy) <= sizeof(L4_sched_param),
                 "Adapt above check");
 
-  int ret = Prio_sc::check_param(sched_param);
+  int ret = Context::check_sched_param(sched_param);
   if (EXPECT_FALSE(ret < 0))
     return commit_result(ret);
 
@@ -107,32 +107,18 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
            cxx::int_value<Cpu_number>(sched_param->cpus.offset()),
            cxx::int_value<Order>(sched_param->cpus.granularity()));
 
-  // TOMO: ugly :(
-  // this is because with the legacy interface, "schedule thread" is also used to set sched parameters.
-  // with new interface, userspace should interact with sched_context cap directly.
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> run_thread() was called!\n");
-  if (!thread->sched())
+  if (!thread->get_sched_context())
   {
     if (M_SCHEDULER_DEBUG)
     {
       printf("SCHEDULER> trying to run thread %p which has no sched_context attached.\n", thread);
       printf("SCHEDULER> creating a new one...\n");
-      //printf("SCHEDULER> RQ has %d entries.\n", SC_Scheduler::rq.current().c);
     }
-    // TOMO: set prio directly from sched_param.
     thread->alloc_sched_context();
-    //thread->sched()->get_budget_sc()->set_period(100 * Config::Default_time_slice);
-    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> thread %p got sched_context %p\n", thread, thread->sched());
-    // TOMO: in which ready_queue to put here?
-    // maybe this is important for MP implementation.
-    //SC_Scheduler::deblock(thread->sched());
   }
 
   thread->migrate(&info);
-
-  //thread->sched()->set(sched_param);
-  //if (thread != current())
-  //  SC_Scheduler::schedule(false);
 
   return commit_result(0);
 }
@@ -240,7 +226,7 @@ Scheduler::op_sched_info(L4_cpu_set_descr const &s, Mword *m, Mword *max_cpus,
 
   *m = rm;
   *max_cpus = Config::Max_num_cpus;
-  *sched_classes = Sched_context::sched_classes();
+  *sched_classes = Context::sched_classes();
 
   return commit_result(0);
 }

@@ -1,5 +1,5 @@
 /**
- * Ready_queue for scheduling contexts.
+ * Ready_queue.
  */
 
 // --------------------------------------------------------------------------
@@ -7,63 +7,58 @@ INTERFACE:
 
 #include <cxx/dlist>
 #include "per_cpu_data.h"
+#include "context.h"
 #include "sched_context.h"
 
 class Ready_queue
 {
 public:
   static Per_cpu<Ready_queue> rq;
-
   static constexpr auto priorities { 256 };
+  int _c = 0;
 
-  int c = 0;
+  void enqueue(Context *, bool);
+  void dequeue(Context *);
+  Context *next_to_run() const;
 
-  void set_idle(Prio_sc *sc)
-  { sc->_prio = Config::Kernel_prio; }
+  void set_idle(Context *c) { c->_prio = Config::Kernel_prio; }
+  void activate(Context *c) { _current = c; }
+  Context *current() const { return _current; }
+  void invalidate_current() { activate(nullptr); }
 
-  void enqueue(Prio_sc *, bool);
-  void dequeue(Prio_sc *);
-  Prio_sc *next_to_run() const;
+  void set_current(Context *c);
+  bool deblock(Context *c, Context *current, bool lazy_q = false);
 
-  void activate(Prio_sc *sc)
-  { _current_sched = sc; }
-  Prio_sc *current_sched() const
-  { return _current_sched; }
-
-  void set_current_sched(Prio_sc *sched);
-  void invalidate_sched() { activate(0); }
-  bool deblock(Prio_sc *sc, Prio_sc *crs, bool lazy_q = false);
-
-  void ready_enqueue(Prio_sc *sc)
+  void ready_enqueue(Context *c)
   {
     assert(cpu_lock.test());
 
     // Don't enqueue threads which are already enqueued
-    if (EXPECT_FALSE (sc->in_ready_queue()))
+    if (EXPECT_FALSE (c->in_ready_queue()))
       return;
 
-    enqueue(sc, true);
+    enqueue(c, true);
   }
 
-  void ready_dequeue(Prio_sc *sc)
+  void ready_dequeue(Context *c)
   {
     assert (cpu_lock.test());
 
     // Don't dequeue threads which aren't enqueued
-    if (EXPECT_FALSE (!sc->in_ready_queue()))
+    if (EXPECT_FALSE (!c->in_ready_queue()))
       return;
 
-    dequeue(sc);
+    dequeue(c);
   }
 
-  void switch_sched(Prio_sc *from, Prio_sc *to)
+  void switch_sched(Context *from, Context *to)
   {
     assert (cpu_lock.test());
 
     // If we're leaving the global timeslice, invalidate it This causes
     // schedule() to select a new timeslice via set_current_sched()
-    if (from == current_sched())
-      invalidate_sched();
+    if (from == current())
+      invalidate_current();
 
     if (from->in_ready_queue())
       dequeue(from);
@@ -74,12 +69,11 @@ public:
   Context *schedule_in_progress;
 
 private:
-    typedef cxx::Sd_list<Prio_sc> Queue;
+    typedef cxx::Sd_list<Context> Queue;
     Unsigned8 prio_highest { 0 };
     Queue queue[priorities];
 
-    Prio_sc *_current_sched;
-
+    Context *_current;
 };
 
 // --------------------------------------------------------------------------
@@ -93,7 +87,7 @@ IMPLEMENTATION:
 DEFINE_PER_CPU Per_cpu<Ready_queue> Ready_queue::rq;
 
 IMPLEMENT inline
-Prio_sc *
+Context *
 Ready_queue::next_to_run() const
 { return queue[prio_highest].front(); }
 
@@ -102,22 +96,22 @@ Ready_queue::next_to_run() const
  */
 IMPLEMENT
 void
-Ready_queue::enqueue(Prio_sc *sc, bool is_current_sched)
+Ready_queue::enqueue(Context *c, bool is_current)
 {
   assert(cpu_lock.test());
 
   // Don't enqueue threads which are already enqueued
-  if (EXPECT_FALSE (sc->in_ready_queue()))
+  if (EXPECT_FALSE (c->in_ready_queue()))
     return;
 
-  Unsigned8 prio = sc->get_prio();
+  Unsigned8 prio = c->get_prio();
 
   if (prio > prio_highest)
     prio_highest = prio;
 
-  queue[prio].push(sc, is_current_sched ? Queue::Front : Queue::Back);
-  c++;
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[%p] enqueue: SC[%p] [RQ has %d entries].\n", this, sc, c);
+  queue[prio].push(c, is_current? Queue::Front : Queue::Back);
+  _c++;
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[addr: %p, entries: %d]: enqueue C[%p]\n", this, _c, c);
 }
 
 /**
@@ -125,62 +119,64 @@ Ready_queue::enqueue(Prio_sc *sc, bool is_current_sched)
  */
 IMPLEMENT inline NEEDS ["cpu_lock.h", <cassert>, "std_macros.h"]
 void
-Ready_queue::dequeue(Prio_sc *sc)
+Ready_queue::dequeue(Context *c)
 {
   assert (cpu_lock.test());
 
   // Don't dequeue threads which aren't enqueued
-  if (EXPECT_FALSE (!sc->in_ready_queue()))
+  if (EXPECT_FALSE (!c->in_ready_queue()))
     return;
 
-  Unsigned8 prio = sc->get_prio();
+  Unsigned8 prio = c->get_prio();
 
-  queue[prio].remove(sc);
+  queue[prio].remove(c);
 
   while (queue[prio_highest].empty() && prio_highest)
     prio_highest--;
-  c--;
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[%p] dequeue: SC[%p] [RQ has %d entries].\n", this, sc, c);
+  _c--;
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[addr:%p, entries: %d]: dequeue C[%p]\n", this, _c, c);
 }
       
       
 PUBLIC inline
 void
-Ready_queue::requeue(Prio_sc *sc)
+Ready_queue::requeue(Context *c)
 {
-  if (!sc->in_ready_queue())
-    enqueue(sc, false);
+  if (!c->in_ready_queue())
+    enqueue(c, false);
   else
-    queue[sc->get_prio()].rotate_to(*++Queue::iter(sc));
+    queue[c->get_prio()].rotate_to(*++Queue::iter(c));
 }
       
 PUBLIC inline
 void
-Ready_queue::deblock_refill(Prio_sc *)
+Ready_queue::deblock_refill(Context *)
 {}
 
 /**
- *  * Set currently active global Prio_sc.
- *   */
+ * Set currently active global Context.
+ */
 IMPLEMENT
 void
-Ready_queue::set_current_sched(Prio_sc *sched)
+Ready_queue::set_current(Context *c)
 {
-  assert (sched);
+  assert (c);
   // Save remainder of previous timeslice or refresh it, unless it had
   // been invalidated
   Timeout * const tt = timeslice_timeout.current();
   Unsigned64 clock = Timer::system_clock();
-  if (Prio_sc *s = current_sched())
+  if (Context *s = current())
   {
     Signed64 left = tt->get_timeout(clock);
     if (left > 0)
-      s->get_budget_sc()->set_left(left);
+      // TOMO: assumption about SC here!
+      static_cast<Budget_sc *>(s->get_sched_context())->set_left(left);
     else
     {
       //s->get_quant_sc()->replenish();
       printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>> BSC[%p]: budget overrun\n", s);
-      s->get_budget_sc()->set_left(0);
+      // TOMO: assumption about SC here!
+      static_cast<Budget_sc *>(s->get_sched_context())->set_left(0);
     }
 
     LOG_SCHED_SAVE(s);
@@ -188,13 +184,15 @@ Ready_queue::set_current_sched(Prio_sc *sched)
 
   // Program new end-of-timeslice timeout
   tt->reset();
-  if (M_TIMER_DEBUG) printf("TIMER> setting timeslice timeout @ %llu\n", clock + sched->get_budget_sc()->get_left());
-  tt->set(clock + sched->get_budget_sc()->get_left(), current_cpu());
+  if (M_TIMER_DEBUG) printf("TIMER> setting timeslice timeout @ %llu\n", clock + static_cast<Budget_sc *>(c->get_sched_context())->get_left());
+  //tt->set(clock + c->get_budget_sc()->get_left(), current_cpu());
+  // TOMO: assumption about SC here!
+  tt->set(clock + static_cast<Budget_sc *>(c->get_sched_context())->get_left(), current_cpu());
 
   // Make this timeslice current
-  activate(sched);
+  activate(c);
 
-  LOG_SCHED_LOAD(sched);
+  LOG_SCHED_LOAD(c);
 }
 
 /**
@@ -208,8 +206,8 @@ Ready_queue::set_current_sched(Prio_sc *sched)
  * scheduling context via `switch_to_locked()`. This is required to ensure that
  * the scheduler does not forget about the scheduling context.
  *
- * \param sc      Prio_sc that shall be deblocked.
- * \param crs     Prio_sc of the currently running context.
+ * \param c       Context that shall be deblocked.
+ * \param current Context of the currently running context.
  * \param lazy_q  Queue lazily if applicable.
  *
  * \returns Whether a reschedule is necessary (deblocked scheduling context
@@ -217,29 +215,29 @@ Ready_queue::set_current_sched(Prio_sc *sched)
  */
 IMPLEMENT inline NEEDS[<cassert>]
 bool
-Ready_queue::deblock(Prio_sc *sc, Prio_sc *crs, bool lazy_q)
+Ready_queue::deblock(Context *c, Context *current, bool lazy_q)
 {
   assert(cpu_lock.test());
 
-  Prio_sc *cs = current_sched();
+  Context *cs = this->current();
   bool res = true;
-  if (sc == cs)
+  if (c == cs)
   {
-    if (crs && crs->dominates(sc))
+    if (current && current->dominates(c))
       res = false;
   }
   else
   {
-    deblock_refill(sc);
+    deblock_refill(c);
 
-    if ((EXPECT_TRUE(cs != 0) && cs->dominates(sc))
-        || (crs && crs->dominates(sc)))
+    if ((EXPECT_TRUE(cs != 0) && cs->dominates(c))
+        || (current && current->dominates(c)))
       res = false;
   }
 
   if (res && lazy_q)
     return true;
 
-  ready_enqueue(sc);
+  ready_enqueue(c);
   return res;
 }

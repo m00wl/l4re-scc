@@ -9,18 +9,19 @@ INTERFACE [sched_fcc]:
 #include "member_offs.h"
 #include "types.h"
 #include "globals.h"
-#include "ready_queue_fp.h"
+//#include "ready_queue_fp.h"
 #include "kobject.h"
-#include "per_cpu_data.h"
+//#include "per_cpu_data.h"
 #include "ref_obj.h"
 
 class Context;
-class Prio_sc;
 class Quant_sc;
 class Budget_sc;
 
-class Sched_context
-: public cxx::Dyn_castable<Sched_context, Kobject>,
+#define SC_MAX_LIST_SIZE 1
+
+class Sched_constraint
+: public cxx::Dyn_castable<Sched_constraint, Kobject>,
   public Ref_cnt_obj
 {
 public:
@@ -31,71 +32,85 @@ public:
   Ram_quota *get_quota() const
   { return _quota; }
 
+  bool can_run() const
+  { return _run; }
+
+  Sched_constraint *get_next() const
+  { return _next; }
+
+  Context *get_blocked() const
+  { return _blocked[0]; }
+
+  void set_blocked(Context *c)
+  { _blocked[0] = c; }
+
 private:
   enum Operation
   { Test = 0, };
 
   Ram_quota *_quota;
+  Sched_constraint *_next;
+  bool _run;
+  Context *_blocked[SC_MAX_LIST_SIZE];
 };
 
-class Prio_sc
-: public Sched_context,
-  public cxx::D_list_item
-{
-  friend class Ready_queue;
+//class Prio_sc
+//: public cxx::D_list_item
+//{
+//  friend class Ready_queue;
+//
+//  union Sp
+//  {
+//    L4_sched_param p;
+//    L4_sched_param_legacy legacy_fixed_prio;
+//    L4_sched_param_fixed_prio fixed_prio;
+//  };
+//
+//public:
+//  bool in_ready_queue() const
+//  { return cxx::Sd_list<Prio_sc>::in_list(this); }
+//
+//  bool dominates(Prio_sc *p) const
+//  {
+//    assert(p);
+//    return _prio > p->get_prio();
+//  }
+//
+//  Context *get_context() const
+//  { return _context; }
+//
+//  void set_context(Context *c)
+//  { _context = c; }
+//
+//  Unsigned8 get_prio() const
+//  { return _prio; }
+//
+//  void set_prio(Unsigned8 p)
+//  { _prio = p; }
+//
+//  //Quant_sc *get_quant_sc() const
+//  //{ return _quant_sc; }
+//
+//  //void set_quant_sc(Quant_sc *q)
+//  //{
+//  //  assert(q);
+//  //  _quant_sc = q;
+//  //}
+//
+//  Budget_sc *get_budget_sc() const
+//  { return _budget_sc; }
+//
+//  void set_budget_sc(Budget_sc *sc)
+//  { _budget_sc = sc; }
+//
+//private:
+//  Context *_context;
+//  Unsigned8 _prio;
+//  //Quant_sc *_quant_sc;
+//  Budget_sc *_budget_sc;
+//};
 
-  union Sp
-  {
-    L4_sched_param p;
-    L4_sched_param_legacy legacy_fixed_prio;
-    L4_sched_param_fixed_prio fixed_prio;
-  };
-
-public:
-  bool in_ready_queue() const
-  { return cxx::Sd_list<Prio_sc>::in_list(this); }
-
-  bool dominates(Prio_sc *p) const
-  {
-    assert(p);
-    return _prio > p->get_prio();
-  }
-
-  Context *get_context() const
-  { return _context; }
-
-  void set_context(Context *c)
-  { _context = c; }
-
-  Unsigned8 get_prio() const
-  { return _prio; }
-
-  void set_prio(Unsigned8 p)
-  { _prio = p; }
-
-  //Quant_sc *get_quant_sc() const
-  //{ return _quant_sc; }
-
-  //void set_quant_sc(Quant_sc *q)
-  //{
-  //  assert(q);
-  //  _quant_sc = q;
-  //}
-
-  Budget_sc *get_budget_sc() const
-  { return _budget_sc; }
-
-  void set_budget_sc(Budget_sc *sc)
-  { _budget_sc = sc; }
-
-private:
-  Context *_context;
-  Unsigned8 _prio;
-  //Quant_sc *_quant_sc;
-  Budget_sc *_budget_sc;
-};
-
-class Quant_sc : public Sched_context
+class Quant_sc : public Sched_constraint
 {
 public:
   Unsigned64 get_quantum() const
@@ -118,7 +133,7 @@ private:
   Unsigned64 _left;
 };
 
-class Budget_sc : public Sched_context
+class Budget_sc : public Sched_constraint
 {
 public:
   Unsigned64 get_budget() const
@@ -139,12 +154,6 @@ public:
   void set_left(Unsigned64 l)
   { _left = l; }
 
-  Prio_sc *get_prio_sc() const
-  { return _prio_sc; }
-
-  void set_prio_sc(Prio_sc *sc)
-  { _prio_sc = sc; }
-
 private:
   class Budget_timeout : public Timeout
   {
@@ -162,7 +171,6 @@ private:
   Unsigned64 _left;
   Unsigned64 _next_repl;
 
-  Prio_sc *_prio_sc;
   Budget_timeout _repl_timeout;
 };
 
@@ -179,6 +187,7 @@ IMPLEMENTATION [sched_fcc]:
 #include "logdefs.h"
 #include "types.h"
 #include "processor.h"
+#include "context.h"
 #include "ready_queue.h"
 
 //PRIVATE static
@@ -193,16 +202,18 @@ IMPLEMENTATION [sched_fcc]:
 
 PUBLIC inline NEEDS[<cstddef>]
 void *
-Sched_context::operator new (size_t, void *b) throw()
+Sched_constraint::operator new (size_t, void *b) throw()
 { return b; }
 
 PUBLIC
-Sched_context::Sched_context(Ram_quota *q)
-: _quota(q)
+Sched_constraint::Sched_constraint(Ram_quota *q)
+: _quota(q),
+  _next(nullptr),
+  _run(false)
 {}
 
 PUBLIC
-Sched_context::~Sched_context()
+Sched_constraint::~Sched_constraint()
 { printf("SC[%p]: delete\n", this); }
 
 //PUBLIC static
@@ -215,14 +226,14 @@ Sched_context::~Sched_context()
 
 PUBLIC static inline
 Mword
-Sched_context::sched_classes()
+Sched_constraint::sched_classes()
 {
   return 1UL << (-L4_sched_param_fixed_prio::Class);
 }
 
 PRIVATE
 L4_msg_tag
-Sched_context::test()
+Sched_constraint::test()
 {
   printf("SC[%p]: SYSCALL!\n", this);
   return commit_result(0);
@@ -230,7 +241,7 @@ Sched_context::test()
 
 PUBLIC
 void
-Sched_context::invoke(L4_obj_ref self, L4_fpage::Rights rights,
+Sched_constraint::invoke(L4_obj_ref self, L4_fpage::Rights rights,
                       Syscall_frame *f, Utcb *utcb) override
 {
   (void)rights;
@@ -268,98 +279,98 @@ register_factory()
 
 }
 
-static Kmem_slab_t<Prio_sc> _prio_sc_allocator("Prio_sc");
+//static Kmem_slab_t<Prio_sc> _prio_sc_allocator("Prio_sc");
 
-PRIVATE static
-Prio_sc::Self_alloc *
-Prio_sc::allocator()
-{ return _prio_sc_allocator.slab(); }
+//PRIVATE static
+//Prio_sc::Self_alloc *
+//Prio_sc::allocator()
+//{ return _prio_sc_allocator.slab(); }
+//
+//PUBLIC inline
+//void
+//Prio_sc::operator delete (void *ptr)
+//{
+//  Prio_sc *sc = reinterpret_cast<Prio_sc *>(ptr);
+//  allocator()->q_free<Ram_quota>(sc->get_quota(), sc);
+//}
+//
+//PUBLIC static
+//Prio_sc *
+//Prio_sc::create(Ram_quota *q)
+//{
+//  void *p = allocator()->q_alloc<Ram_quota>(q);
+//  return p ? new (p) Prio_sc(q) : 0;
+//}
 
-PUBLIC inline
-void
-Prio_sc::operator delete (void *ptr)
-{
-  Prio_sc *sc = reinterpret_cast<Prio_sc *>(ptr);
-  allocator()->q_free<Ram_quota>(sc->get_quota(), sc);
-}
-
-PUBLIC static
-Prio_sc *
-Prio_sc::create(Ram_quota *q)
-{
-  void *p = allocator()->q_alloc<Ram_quota>(q);
-  return p ? new (p) Prio_sc(q) : 0;
-}
-
-PUBLIC
-Prio_sc::Prio_sc(Ram_quota *q)
-: Sched_context(q),
-  _context(nullptr),
-  _prio(Config::Default_prio),
-  _budget_sc(nullptr)
-{}
-
-PUBLIC static inline
-int
-Prio_sc::check_param(L4_sched_param const *_p)
-{
-  Sp const *p = reinterpret_cast<Sp const *>(_p);
-  switch (p->p.sched_class)
-  {
-    case L4_sched_param_fixed_prio::Class:
-      if (!_p->check_length<L4_sched_param_fixed_prio>())
-        return -L4_err::EInval;
-      break;
-
-    default:
-      if (!_p->is_legacy())
-        return -L4_err::ERange;
-      break;
-  }
-
-  return 0;
-}
-
-PUBLIC
-void
-Prio_sc::set(L4_sched_param const *_p)
-{
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> Prio_sc[%p]: set\n", this);
-  Sp const *p = reinterpret_cast<Sp const *>(_p);
-  if (_p->is_legacy())
-  {
-    // legacy fixed prio
-    _prio = p->legacy_fixed_prio.prio;
-    if (p->legacy_fixed_prio.prio > 255)
-      _prio = 255;
-
-    //get_quant_sc()->set_quantum(p->legacy_fixed_prio.quantum);
-    get_budget_sc()->set_budget(p->legacy_fixed_prio.quantum);
-    if (p->legacy_fixed_prio.quantum == 0)
-      //get_quant_sc()->set_quantum(Config::Default_time_slice);
-      get_budget_sc()->set_budget(Config::Default_time_slice);
-    return;
-  }
-
-  switch (p->p.sched_class)
-  {
-    case L4_sched_param_fixed_prio::Class:
-      _prio = p->fixed_prio.prio;
-      if (p->fixed_prio.prio > 255)
-        _prio = 255;
-
-      //get_quant_sc()->set_quantum(p->fixed_prio.quantum);
-      get_budget_sc()->set_budget(p->fixed_prio.quantum);
-      if (p->fixed_prio.quantum == 0)
-        //get_quant_sc()->set_quantum(Config::Default_time_slice);
-        get_budget_sc()->set_budget(Config::Default_time_slice);
-      break;
-
-    default:
-      assert(false && "Missing check_param()?");
-      break;
-  }
-}
+//PUBLIC
+//Prio_sc::Prio_sc(Ram_quota *q)
+//: Sched_context(q),
+//  _context(nullptr),
+//  _prio(Config::Default_prio),
+//  _budget_sc(nullptr)
+//{}
+//
+//PUBLIC static inline
+//int
+//Prio_sc::check_param(L4_sched_param const *_p)
+//{
+//  Sp const *p = reinterpret_cast<Sp const *>(_p);
+//  switch (p->p.sched_class)
+//  {
+//    case L4_sched_param_fixed_prio::Class:
+//      if (!_p->check_length<L4_sched_param_fixed_prio>())
+//        return -L4_err::EInval;
+//      break;
+//
+//    default:
+//      if (!_p->is_legacy())
+//        return -L4_err::ERange;
+//      break;
+//  }
+//
+//  return 0;
+//}
+//
+//PUBLIC
+//void
+//Prio_sc::set(L4_sched_param const *_p)
+//{
+//  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> Prio_sc[%p]: set\n", this);
+//  Sp const *p = reinterpret_cast<Sp const *>(_p);
+//  if (_p->is_legacy())
+//  {
+//    // legacy fixed prio
+//    _prio = p->legacy_fixed_prio.prio;
+//    if (p->legacy_fixed_prio.prio > 255)
+//      _prio = 255;
+//
+//    //get_quant_sc()->set_quantum(p->legacy_fixed_prio.quantum);
+//    get_budget_sc()->set_budget(p->legacy_fixed_prio.quantum);
+//    if (p->legacy_fixed_prio.quantum == 0)
+//      //get_quant_sc()->set_quantum(Config::Default_time_slice);
+//      get_budget_sc()->set_budget(Config::Default_time_slice);
+//    return;
+//  }
+//
+//  switch (p->p.sched_class)
+//  {
+//    case L4_sched_param_fixed_prio::Class:
+//      _prio = p->fixed_prio.prio;
+//      if (p->fixed_prio.prio > 255)
+//        _prio = 255;
+//
+//      //get_quant_sc()->set_quantum(p->fixed_prio.quantum);
+//      get_budget_sc()->set_budget(p->fixed_prio.quantum);
+//      if (p->fixed_prio.quantum == 0)
+//        //get_quant_sc()->set_quantum(Config::Default_time_slice);
+//        get_budget_sc()->set_budget(Config::Default_time_slice);
+//      break;
+//
+//    default:
+//      assert(false && "Missing check_param()?");
+//      break;
+//  }
+//}
 
 static Kmem_slab_t<Quant_sc> _quant_sc_allocator("Quant_sc");
 
@@ -386,7 +397,7 @@ Quant_sc::create(Ram_quota *q)
 
 PUBLIC
 Quant_sc::Quant_sc(Ram_quota *q)
-: Sched_context(q),
+: Sched_constraint(q),
   _quantum(Config::Default_time_slice),
   _left(Config::Default_time_slice)
 {}
@@ -416,12 +427,11 @@ Budget_sc::create(Ram_quota *q)
 
 PUBLIC
 Budget_sc::Budget_sc(Ram_quota *q)
-: Sched_context(q),
+: Sched_constraint(q),
   _budget(Config::Default_time_slice),
   _period(Config::Default_time_slice),
   _left(Config::Default_time_slice),
   _next_repl(0),
-  _prio_sc(0),
   _repl_timeout(this)
 {}
 
@@ -482,30 +492,30 @@ PUBLIC
 bool
 Budget_sc::period_expired()
 {
-  //if (M_SCHEDULER_DEBUG) printf("SCHEDULER> BSC[%p]: period_expired\n", this);
+  // TOMO: requeue here?
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> BSC[%p]: period_expired\n", this);
   replenish();
   calc_and_schedule_next_repl();
 
   Ready_queue &rq { Ready_queue::rq.current() };
-  Prio_sc *curr_sc = rq.current_sched();
+  Context *curr = rq.current();
 
-  if ((curr_sc != _prio_sc) && !_prio_sc->in_ready_queue())
-    rq.ready_enqueue(_prio_sc);
+  if ((curr != get_blocked()) && !get_blocked()->in_ready_queue())
+    rq.ready_enqueue(get_blocked());
 
-  if (curr_sc && (curr_sc->get_budget_sc() == this))
+  // TOMO: assumption about SC here!
+  if (curr && (curr->get_sched_context() == this))
   {
     Timeout *const tt = timeslice_timeout.current();
     Unsigned64 clock = Timer::system_clock();
     tt->reset();
-    if (M_SCHEDULER_DEBUG)
-    {
-      printf("SCHEDULER> we replenished the currently running thread.\n");
-      printf("TIMER> setting timeslice timeout @ %llu\n", clock + _left);
-    }
+    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> we replenished the currently running thread.\n");
+    if (M_TIMER_DEBUG) printf("TIMER> setting timeslice timeout @ %llu\n", clock + _left);
     tt->set(clock + _left, current_cpu());
+    //rq.requeue(get_blocked());
   }
 
-  // reschedule, if the replenished thread can preempt the current thread.
+  //reschedule, if the replenished thread can preempt the current thread.
   return true;
 }
 

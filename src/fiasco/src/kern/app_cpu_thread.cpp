@@ -89,7 +89,7 @@ App_cpu_thread::bootstrap(Mword resume)
       kernel_context(ccpu, this);
       //Sched_context::set_kernel_sc(home_cpu(), sched());
       //Sched_context::rq.current().set_idle(this->sched());
-      Ready_queue::rq.current().set_idle(this->sched());
+      Ready_queue::rq.current().set_idle(this);
 
       Timer_tick::setup(ccpu);
     }
@@ -98,9 +98,13 @@ App_cpu_thread::bootstrap(Mword resume)
   Mem_space::enable_tlb(ccpu);
 
   if (!resume)
+  {
     // Setup initial timeslice
     //Sched_context::rq.current().set_current_sched(sched());
-    Ready_queue::rq.current().set_current_sched(sched());
+    // TOMO: assumption about SC here!
+    static_cast<Budget_sc *>(get_sched_context())->calc_and_schedule_next_repl();
+    Ready_queue::rq.current().set_current(this);
+  }
 
   if (!resume)
     Per_cpu_data::run_late_ctors(ccpu);

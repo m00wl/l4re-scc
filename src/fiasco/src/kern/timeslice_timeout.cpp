@@ -37,17 +37,19 @@ Timeslice_timeout::expired() override
 {
   //Sched_context::Ready_queue &rq = Sched_context::rq.current();
   Ready_queue &rq { Ready_queue::rq.current() };
-  Prio_sc *sched = rq.current_sched();
+  Context *current = rq.current();
 
-  if (sched)
+  if (current)
   {
-    sched->get_budget_sc()->timeslice_expired();
+    // TOMO: assumption about SC here!
+    Budget_sc *b = static_cast<Budget_sc *>(current->get_sched_context());
+    b->timeslice_expired();
     // we dequeue the SC here, because we are out of budget and need to make room for other lower-prio threads.
     // the SCs repl timeout will enqueue again later.
     //sched->get_quant_sc()->replenish();
     //rq.requeue(sched);
-    rq.invalidate_sched();
-    rq.ready_dequeue(sched);
+    rq.invalidate_current();
+    rq.ready_dequeue(current);
   }
 
   return true;

@@ -148,7 +148,7 @@ IMPLEMENTATION:
 #include "timer.h"
 #include "warn.h"
 #include "context.h"
-#include "sc_scheduler.h"
+//#include "sc_scheduler.h"
 #include "ready_queue.h"
 
 PUBLIC
@@ -344,7 +344,7 @@ Thread::check_sender(Thread *sender, bool timeout)
   // idea: do_ipc (with partner) is always initiated from the sender
   // means: we always run with the sender's sched context.
   // means: we can take prio and stuff from SC_Scheduler::get_current.
-  sender->sender_enqueue(sender_list(), sender->sched()->get_prio());
+  sender->sender_enqueue(sender_list(), sender->get_prio());
   //sender->sender_enqueue(sender_list(), SC_Scheduler::get_current()->prio());
   vcpu_set_irq_pending();
   return Check_sender::Queued;
@@ -404,14 +404,19 @@ void Thread::goto_sleep(L4_timeout const &t, Sender *sender, Utcb *utcb)
   state_del_dirty(Thread_ready);
   setup_timer(t, utcb, &timeout);
 
-  if (sender == this)
-    //switch_sched(sched(), &Sched_context::rq.current());
-    switch_sched(sched(), &Ready_queue::rq.current());
+  // TOMO: why is this here?
+  //if (sender == this)
+  //{
+  //  //switch_sched(sched(), &Sched_context::rq.current());
+  //  //switch_sched(sched(), &Ready_queue::rq.current());
+  //  panic("IPC goto_sleep");
+  //  //switch_sched(this, &Ready_queue::rq.current());
+  //}
 
-  if (M_IPC_DEBUG) printf("IPC> thread %p: going to sleep because IPC partner is not ready.\n", this);
+  if (M_IPC_DEBUG) printf("IPC> C[%p]: going to sleep because IPC partner is not ready.\n", this);
   //SC_Scheduler::schedule(true);
   schedule();
-  if (M_IPC_DEBUG) printf("IPC> thread %p: waking up because IPC partner unblocked me.\n", this);
+  if (M_IPC_DEBUG) printf("IPC> C[%p]: waking up because IPC partner unblocked me.\n", this);
 
   reset_timeout();
 
@@ -493,8 +498,9 @@ Thread::activate_ipc_partner(Thread *partner, Cpu_number current_cpu,
     //Sched_context *cs = rq.current_sched();
     //Sched_context *cs = SC_Scheduler::get_current();
     Ready_queue &rq { Ready_queue::rq.current() };
-    Sched_context *cs = rq.current_sched();
-    do_switch = do_switch && (closed_wait || cs != sched());
+    //Sched_context *cs = rq.current_sched();
+    Context *cs = rq.current();
+    do_switch = do_switch && (closed_wait || cs != this);
     partner->state_change_dirty(~Thread_ipc_transfer, Thread_ready);
     if (do_switch)
       {
@@ -1270,7 +1276,8 @@ Thread::remote_ipc_send(Ipc_remote_request *rq)
   rq->partner->state_change_dirty(~Thread_ipc_mask, Thread_ready);
   if (rq->partner->home_cpu() == current_cpu() && current() != rq->partner)
     //Sched_context::rq.current().ready_enqueue(rq->partner->sched());
-    Ready_queue::rq.current().ready_enqueue(rq->partner->sched());
+    //Ready_queue::rq.current().ready_enqueue(rq->partner->sched());
+    Ready_queue::rq.current().ready_enqueue(rq->partner);
 
   return true;
 }

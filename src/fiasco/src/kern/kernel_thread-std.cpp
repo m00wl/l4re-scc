@@ -68,7 +68,11 @@ Kernel_thread::init_workload()
   check (sigma0_thread->ex_regs(Kip::k()->sigma0_ip, 0));
 
   sigma0_thread->alloc_sched_context();
-  check(map(sigma0_thread->sched(), sigma0, sigma0, C_sched_context, 0));
+  // TOMO: we should map the sched_constraints to the initial objects.
+  // problem is, we don't know how they get exposed to userspace.
+  // therefore, we don't do it just yet.
+  // but we definitely should do this later.
+  //check(map(sigma0_thread->get_sched_context(), sigma0, sigma0, C_sched_context, 0));
 
   //
   // create the boot task
@@ -99,7 +103,8 @@ Kernel_thread::init_workload()
   check (boot_thread->ex_regs(Kip::k()->root_ip, 0));
 
   boot_thread->alloc_sched_context();
-  check(map(boot_thread->sched(),   boot_task, boot_task, C_sched_context, 0));
+  // TOMO: map sched_constraints here.
+  //check(map(boot_thread->get_sched_context(), boot_task, boot_task, C_sched_context, 0));
 
   Ipc_gate *s0_b_gate = Ipc_gate::create(Ram_quota::root, sigma0_thread, 4 << 4);
 

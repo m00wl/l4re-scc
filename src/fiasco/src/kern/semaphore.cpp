@@ -135,7 +135,8 @@ Semaphore::down(Thread *ct)
           ct->set_partner(sem_partner());
           ct->state_change_dirty(~Thread_ready, Thread_receive_wait);
           ct->set_wait_queue(&_waiting);
-          ct->sender_enqueue(&_waiting, ct->sched()->get_prio());
+          //ct->sender_enqueue(&_waiting, ct->sched()->get_prio());
+          ct->sender_enqueue(&_waiting, ct->get_prio());
         }
       else
         --_queued;

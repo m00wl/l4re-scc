@@ -305,46 +305,50 @@ Thread::~Thread()		// To be called in locked state.
   _kernel_sp = 0;
   *--init_sp = 0;
   Fpu_alloc::free_state(fpu_state());
-  assert (!in_ready_list());
+  assert (!in_ready_queue());
 }
 
 PUBLIC
 void
 Thread::alloc_sched_context()
 {
-  // create.
-  //Sched_context *sc = Sched_context::create(_quota);
-  //assert(sc);
-  //sc->inc_ref();
+  //panic("Thread: alloc_sched_context()");
+  //// create.
+  ////Sched_context *sc = Sched_context::create(_quota);
+  ////assert(sc);
+  ////sc->inc_ref();
+
+  ////Prio_sc *psc = Prio_sc::create(_quota);
+  ////assert(psc);
+  ////psc->inc_ref();
+  ////Quant_sc *qsc = Quant_sc::create(_quota);
+  ////assert(qsc);
+  ////qsc->inc_ref();
 
   //Prio_sc *psc = Prio_sc::create(_quota);
   //assert(psc);
   //psc->inc_ref();
-  //Quant_sc *qsc = Quant_sc::create(_quota);
-  //assert(qsc);
-  //qsc->inc_ref();
-
-  Prio_sc *psc = Prio_sc::create(_quota);
-  assert(psc);
-  psc->inc_ref();
   Budget_sc *bsc = Budget_sc::create(_quota);
   assert(bsc);
   bsc->inc_ref();
+  bsc->set_blocked(this);
+  set_sched_context(bsc);
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> C[addr:%p, cpu:%d]---BSC[%p]\n", this, cxx::int_value<Cpu_number>(this->home_cpu()), bsc);
 
-  // set pointers.
-  //this->set_sched(sc);
-  //sc->set_context(this);
+  //// set pointers.
+  ////this->set_sched(sc);
+  ////sc->set_context(this);
+
+  ////this->set_sched(psc);
+  ////psc->set_context(this);
+  ////psc->set_quant_sc(qsc);
 
   //this->set_sched(psc);
   //psc->set_context(this);
-  //psc->set_quant_sc(qsc);
-
-  this->set_sched(psc);
-  psc->set_context(this);
-  psc->set_budget_sc(bsc);
-  bsc->set_prio_sc(psc);
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> C[%p]---PSC[%p]---BSC[%p]\n", this, psc, bsc);
-  //bsc->calc_and_schedule_next_repl();
+  //psc->set_budget_sc(bsc);
+  //bsc->set_prio_sc(psc);
+  //if (M_SCHEDULER_DEBUG) printf("SCHEDULER> C[%p]---PSC[%p]---BSC[%p]\n", this, psc, bsc);
+  ////bsc->calc_and_schedule_next_repl();
 }
 
 // IPC-gate deletion stuff ------------------------------------
@@ -507,7 +511,7 @@ Context::Drq::Result
 Thread::handle_kill_helper(Drq *src, Context *, void *)
 {
   Thread *to_delete = static_cast<Thread*>(static_cast<Kernel_drq*>(src)->src);
-  assert (!to_delete->in_ready_list());
+  assert (!to_delete->in_ready_queue());
   if (to_delete->dec_ref() == 0)
     delete to_delete;
 
@@ -553,8 +557,8 @@ Thread::do_kill()
     //if (sched() != sched_context())
     //  switch_sched(sched_context(), &rq);
 
-    if (!rq.current_sched() || rq.current_sched()->get_context() == this)
-      rq.set_current_sched(current()->sched());
+    if (!rq.current() || rq.current() == this)
+      rq.set_current(current());
   }
 
   // if other threads want to send me IPC messages, abort these
@@ -604,7 +608,7 @@ Thread::do_kill()
 
   // dequeue from system queues
   //Sched_context::rq.current().ready_dequeue(sched());
-  Ready_queue::rq.current().ready_dequeue(sched());
+  Ready_queue::rq.current().ready_dequeue(this);
 
   if (_del_observer)
     {
@@ -617,7 +621,7 @@ Thread::do_kill()
   state_del_dirty(Thread_ready_mask);
 
   //Sched_context::rq.current().ready_dequeue(sched());
-  Ready_queue::rq.current().ready_dequeue(sched());
+  Ready_queue::rq.current().ready_dequeue(this);
 
   // make sure this thread really never runs again by migrating it
   // to the 'invalid' CPU forcefully and then switching to the kernel
@@ -663,7 +667,7 @@ Thread::kill()
     {
       prepare_kill();
       //Sched_context::rq.current().deblock(sched(), current()->sched());
-      Ready_queue::rq.current().deblock(sched(), current()->sched());
+      Ready_queue::rq.current().deblock(this, current());
       return true;
     }
 
@@ -679,26 +683,28 @@ Thread::set_sched_params(L4_sched_param const *p)
 {
   //(void)p;
   //panic("Thread::set_sched_params: sc not available here\n");
-  Prio_sc *sc = this->sched();
+  //Prio_sc *sc = this->sched();
 
   // this can actually access the ready queue of a CPU that is offline remotely
   //Sched_context::Ready_queue &rq = Sched_context::rq.cpu(home_cpu());
   //SC_Scheduler::Ready_queue &rq { SC_Scheduler::rq.cpu(home_cpu()) };
   Ready_queue &rq { Ready_queue::rq.cpu(home_cpu()) };
-  rq.dequeue(sc);
+  rq.dequeue(this);
 
-  sc->set(p);
+  set_sched_param(p);
   //sc->get_quant_sc()->replenish();
-  sc->get_budget_sc()->replenish();
-  sc->get_budget_sc()->calc_and_schedule_next_repl();
+  // TOMO: assumption about SC here!
+  Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
+  b->replenish();
+  b->calc_and_schedule_next_repl();
 
   //if (sc == SC_Scheduler::get_current())
   //  SC_Scheduler::set_current(sc);
-  if (sc == rq.current_sched())
-    rq.set_current_sched(sc);
+  if (this == rq.current())
+    rq.set_current(this);
 
   if (state() & Thread_ready_mask) // maybe we could ommit enqueueing current
-    rq.ready_enqueue(this->sched());
+    rq.ready_enqueue(this);
 }
 
 PUBLIC
@@ -787,7 +793,7 @@ Thread::start_migration()
 
   assert (!((Mword)m & 0x3)); // ensure alignment
 
-  if (!sched())
+  if (!get_sched_context())
   {
     if (M_SCHEDULER_DEBUG)
     {
@@ -795,7 +801,6 @@ Thread::start_migration()
       printf("SCHEDULER> creating a new one...\n");
     }
     alloc_sched_context();
-    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> thread %p got sched_context %p\n", this, this->sched());
   }
 
   if (!m || !mp_cas(&_migration, m, (Migration*)0))
@@ -1084,14 +1089,14 @@ Thread::migrate_away(Migration *inf, bool remote)
       if (rq.schedule_in_progress == this)
         rq.schedule_in_progress = 0;
 
-      rq.dequeue(this->sched());
+      rq.dequeue(this);
 
         {
           // Not sure if this can ever happen
-          Sched_context *csc = rq.current_sched();
-          if (csc == sched())
+          Context *csc = rq.current();
+          if (csc == this)
             {
-              rq.set_current_sched(kernel_context(current_cpu())->sched());
+              rq.set_current(kernel_context(current_cpu()));
               resched = true;
             }
         }
@@ -1099,11 +1104,13 @@ Thread::migrate_away(Migration *inf, bool remote)
 
   //Sched_context *sc = sched_context();
   //Sched_context *sc = sched();
-  Prio_sc *sc = sched();
-  sc->set(inf->sp);
+  //Prio_sc *sc = sched();
+  set_sched_param(inf->sp);
   //sc->get_quant_sc()->replenish();
-  sc->get_budget_sc()->replenish();
-  sc->get_budget_sc()->calc_and_schedule_next_repl();
+  // TOMO: assumption about SC here!
+  Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
+  b->replenish();
+  b->calc_and_schedule_next_repl();
   //set_sched(sc);
 
   state_add_dirty(Thread_finish_migration);
@@ -1126,7 +1133,7 @@ Thread::migrate_to(Cpu_number target_cpu, bool)
 
   bool resched = false;
   if (state() & Thread_ready_mask)
-    resched = Ready_queue::rq.current().deblock(sched(), current()->sched());
+    resched = Ready_queue::rq.current().deblock(this, current());
 
   enqueue_timeout_again();
 
@@ -1271,10 +1278,10 @@ Thread::handle_remote_requests_irq()
   if (Ready_queue::rq.current().schedule_in_progress)
     {
       if (   (c->state() & Thread_ready_mask)
-          && !c->in_ready_list()
+          && !c->in_ready_queue()
           && on_current_cpu)
         //Sched_context::rq.current().ready_enqueue(c->sched());
-        Ready_queue::rq.current().ready_enqueue(c->sched());
+        Ready_queue::rq.current().ready_enqueue(c);
     }
   else if (resched)
     c->schedule();
@@ -1317,12 +1324,12 @@ Thread::migrate_away(Migration *inf, bool remote)
       if (rq.schedule_in_progress == this)
         rq.schedule_in_progress = 0;
 
-      rq.ready_dequeue(sched());
+      rq.ready_dequeue(this);
 
-      Sched_context *csc = rq.current_sched();
-      if (!remote && csc == sched())
+      Context *csc = rq.current();
+      if (!remote && csc == this)
         {
-          rq.set_current_sched(kernel_context(current_cpu())->sched());
+          rq.set_current(kernel_context(current_cpu()));
           resched = true;
         }
     }
@@ -1343,16 +1350,18 @@ Thread::migrate_away(Migration *inf, bool remote)
       if (_pending_rq.queued())
         check (q.dequeue(&_pending_rq));
 
-      Prio_sc *sc = sched();
-      sc->set(inf->sp);
+      //Prio_sc *sc = sched();
+      set_sched_param(inf->sp);
       //sc->get_quant_sc()->replenish();
-      sc->get_budget_sc()->replenish();
-      sc->get_budget_sc()->calc_and_schedule_next_repl();
+      // TOMO: assumption about SC here!
+      Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
+      b->replenish();
+      b->calc_and_schedule_next_repl();
       //set_sched(sc);
 
       Mem::mp_wmb();
 
-      assert (!in_ready_list());
+      assert (!in_ready_queue());
       assert (!_pending_rq.queued());
 
       // The migration must be finished on the new CPU core before executing any
@@ -1392,7 +1401,7 @@ Thread::migrate_to(Cpu_number target_cpu, bool /*remote*/)
           g.reset();
           bool resched = handle_drq();
           //return resched | Sched_context::rq.current().deblock(sched(), current()->sched());
-          return resched | Ready_queue::rq.current().deblock(sched(), current()->sched());
+          return resched | Ready_queue::rq.current().deblock(this, current());
         }
 
       if (!_pending_rq.queued())

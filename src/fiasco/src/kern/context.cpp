@@ -14,19 +14,17 @@ INTERFACE:
 #include "queue.h"
 #include "queue_item.h"
 #include "rcupdate.h"
-//#include "sched_context.h"
 #include "space.h"
 #include "spin_lock.h"
 #include "timeout.h"
 #include <fiasco_defs.h>
 #include <cxx/function>
+#include "ready_queue_fp.h"
 
 class Entry_frame;
 class Context;
 class Kobject_iface;
-
-class Sched_context;
-class Prio_sc;
+class Sched_constraint;
 class Ready_queue;
 
 class Context_ptr
@@ -105,6 +103,7 @@ public:
  */
 class Context :
   public Context_base,
+  public cxx::D_list_item,
   protected Rcu_item
 {
   MEMBER_OFFSET();
@@ -322,12 +321,18 @@ private:
   // Thread::kill needs to know
   int _lock_cnt;
 
-  // The scheduling parameters.  We would only need to keep an
-  // anonymous reference to them as we do not need them ourselves, but
-  // we aggregate them for performance reasons.
-  //Sched_context _sched_context;
-  //Sched_context *_sched;
-  Prio_sc *_sched;
+  // The scheduling parameters.
+  friend class Ready_queue;
+  Unsigned8 _prio;
+  Sched_constraint *_sched_context;
+
+  union Sched_param
+  {
+    L4_sched_param p;
+    L4_sched_param_legacy legacy_fixed_prio;
+    L4_sched_param_fixed_prio fixed_prio;
+  };
+
 
   // Pointer to floating point register state
   Fpu_state _fpu_state;
@@ -446,7 +451,6 @@ IMPLEMENTATION:
 #include "timer.h"
 #include "timeout.h"
 #include "sched_context.h"
-#include "sc_scheduler.h"
 #include "ready_queue.h"
 
 DEFINE_PER_CPU Per_cpu<Clock> Context::_clock(Per_cpu_data::Cpu_num);
@@ -481,7 +485,8 @@ Context::Context()
   // something different.
   _helper(this),
   //_sched_context(this),
-  _sched(nullptr) // TOMO: this is dangerous and definitely won't hurt us later...
+  _prio(Config::Default_prio),
+  _sched_context(nullptr)
 {
   _home_cpu = Cpu::invalid();
 }
@@ -721,14 +726,13 @@ Context::lock_cnt() const
 //  queue->switch_sched(sched(), next);
 //  set_sched(next);
 //}
-PUBLIC
-void
-Context::switch_sched(Prio_sc *next, Ready_queue *queue)
-{
-  queue->switch_sched(sched(), next);
-  set_sched(next);
-}
-
+//PUBLIC
+//void
+//Context::switch_sched(Prio_sc *next, Ready_queue *queue)
+//{
+//  queue->switch_sched(sched(), next);
+//  set_sched(next);
+//}
 
 /**
  * Select a different context for running and activate it.
@@ -745,8 +749,7 @@ Context::schedule()
   //(void)rq;
 
   //panic("c: schedule not available\n");
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> we schedule now [RQ has %d entries]\n", Ready_queue::rq.current().c);
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> i am thread: %p with sc: %p.\n", this, sched());
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> we schedule now [RQ has %d entries]\n", Ready_queue::rq.current()._c);
   auto guard = lock_guard(cpu_lock);
   //assert (!Sched_context::rq.current().schedule_in_progress);
   assert (!Ready_queue::rq.current().schedule_in_progress);
@@ -795,13 +798,13 @@ Context::schedule()
 
   for (;;)
     {
-      next_to_run = rq->next_to_run()->get_context();
+      next_to_run = rq->next_to_run();
 
       // Ensure ready-list sanity
       assert (next_to_run);
 
       if (EXPECT_FALSE(!(next_to_run->state() & Thread_ready_mask)))
-        rq->ready_dequeue(next_to_run->sched());
+        rq->ready_dequeue(next_to_run);
       else switch (schedule_switch_to_locked(next_to_run))
         {
         default:
@@ -856,27 +859,151 @@ Context::schedule_if(bool s)
 //  return 0;
 //}
 
-/**
- * Return Context's currently active Sched_context.
- * @return Active Sched_context
- */
-PUBLIC inline
-Prio_sc *
-Context::sched() const
+///**
+// * Return Context's currently active Sched_context.
+// * @return Active Sched_context
+// */
+//PUBLIC inline
+//Prio_sc *
+//Context::sched() const
+//{
+//  return _sched;
+//}
+
+///**
+// * Set Context's currently active Sched_context.
+// * @param sched Sched_context to be activated
+// */
+//PUBLIC inline
+//void
+//Context::set_sched(Prio_sc * const sched)
+//{
+//  _sched = sched;
+//}
+
+
+// Scheduling functions.
+
+PUBLIC
+Unsigned8
+Context::get_prio() const
+{ return _prio; }
+
+PUBLIC
+void
+Context::change_prio_to(Unsigned8 p)
 {
-  return _sched;
+  Ready_queue &rq { Ready_queue::rq.current() };
+
+  if (this == rq.current())
+    rq.invalidate_current();
+
+  if (this->in_ready_queue())
+    rq.dequeue(this);
+
+  _prio = p;
+
+  rq.enqueue(this, false);
 }
 
-/**
- * Set Context's currently active Sched_context.
- * @param sched Sched_context to be activated
- */
-PUBLIC inline
+PUBLIC
+Sched_constraint *
+Context::get_sched_context() const
+{ return _sched_context; }
+
+// temporary:
+PUBLIC
 void
-Context::set_sched(Prio_sc * const sched)
+Context::set_sched_context(Sched_constraint *sc)
+{ _sched_context = sc; }
+
+PUBLIC
+bool
+Context::in_ready_queue() const
+{ return cxx::Sd_list<Context>::in_list(this); }
+
+PUBLIC
+bool
+Context::dominates(Context *c) const
+{ return _prio > c->get_prio(); }
+
+PUBLIC static inline
+Mword
+Context::sched_classes()
 {
-  _sched = sched;
+  return 1UL << (-L4_sched_param_fixed_prio::Class);
 }
+
+PUBLIC static inline
+int
+Context::check_sched_param(L4_sched_param const *_p)
+{
+  Sched_param const *p = reinterpret_cast<Sched_param const *>(_p);
+  switch (p->p.sched_class)
+  {
+    case L4_sched_param_fixed_prio::Class:
+      if (!_p->check_length<L4_sched_param_fixed_prio>())
+        return -L4_err::EInval;
+      break;
+
+    default:
+      if (!_p->is_legacy())
+        return -L4_err::ERange;
+      break;
+  }
+
+  return 0;
+}
+
+PUBLIC
+void
+Context::set_sched_param(L4_sched_param const *_p)
+{
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> Context[%p]: set_sched_param\n", this);
+  Sched_param const *p = reinterpret_cast<Sched_param const *>(_p);
+  // TOMO: assumption about SC here!
+  Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
+  if (_p->is_legacy())
+  {
+    // legacy fixed prio
+    _prio = p->legacy_fixed_prio.prio;
+    if (p->legacy_fixed_prio.prio > 255)
+      _prio = 255;
+
+    // TOMO: assumption about SC here!
+    //get_quant_sc()->set_quantum(p->legacy_fixed_prio.quantum);
+    //get_budget_sc()->set_budget(p->legacy_fixed_prio.quantum);
+    b->set_budget(p->legacy_fixed_prio.quantum);
+    if (p->legacy_fixed_prio.quantum == 0)
+      //get_quant_sc()->set_quantum(Config::Default_time_slice);
+      //get_budget_sc()->set_budget(Config::Default_time_slice);
+      b->set_budget(Config::Default_time_slice);
+    return;
+  }
+
+  switch (p->p.sched_class)
+  {
+    case L4_sched_param_fixed_prio::Class:
+      _prio = p->fixed_prio.prio;
+      if (p->fixed_prio.prio > 255)
+        _prio = 255;
+
+      // TOMO: assumption about SC here!
+      //get_quant_sc()->set_quantum(p->fixed_prio.quantum);
+      //get_budget_sc()->set_budget(p->fixed_prio.quantum);
+      b->set_budget(p->fixed_prio.quantum);
+      if (p->fixed_prio.quantum == 0)
+        //get_quant_sc()->set_quantum(Config::Default_time_slice);
+        //get_budget_sc()->set_budget(Config::Default_time_slice);
+        b->set_budget(Config::Default_time_slice);
+      break;
+
+    default:
+      assert(false && "Missing check_param()?");
+      break;
+  }
+}
+
 
 // queue operations
 
@@ -893,23 +1020,25 @@ Context::update_ready_list()
   //panic("c: update_ready_list not available\n");
   assert (this == current());
 
-  if ((state() & Thread_ready_mask) && sched()->get_budget_sc()->get_left())
+  // TOMO: assumption about SC here!
+  Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
+  if ((state() & Thread_ready_mask) && b->get_left())
     //Sched_context::rq.current().ready_enqueue(sched());
-    Ready_queue::rq.current().ready_enqueue(sched());
+    Ready_queue::rq.current().ready_enqueue(this);
 }
 
-/**
- * Check if Context is in ready-list.
- * @return 1 if thread is in ready-list, 0 otherwise
- */
-PUBLIC //inline
-Mword
-Context::in_ready_list() const
-{
-  //panic("c: in_ready_list not available\n");
-  assert(sched());
-  return sched()->in_ready_queue();
-}
+///**
+// * Check if Context is in ready-list.
+// * @return 1 if thread is in ready-list, 0 otherwise
+// */
+//PUBLIC //inline
+//Mword
+//Context::in_ready_list() const
+//{
+//  //panic("c: in_ready_list not available\n");
+//  assert(sched());
+//  return sched()->in_ready_queue();
+//}
 
 
 /**
@@ -922,9 +1051,11 @@ PUBLIC
 void
 Context::activate()
 {
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> context %p: activated\n", this);
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> C[%p]: activated\n", this);
   auto guard = lock_guard(cpu_lock);
-  sched()->get_budget_sc()->calc_and_schedule_next_repl();
+  // TOMO: assumption about SC here!
+  Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
+  b->calc_and_schedule_next_repl();
   if (xcpu_state_change(~0UL, Thread_ready, true))
     current()->switch_to_locked(this);
 }
@@ -1017,7 +1148,7 @@ PROTECTED //inline NEEDS ["assert.h", Context::switch_handle_drq]
 Context::Switch FIASCO_WARN_RESULT
 Context::schedule_switch_to_locked(Context *t)
 {
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> next to run: C[%p]---PSC[%p]---BSC[%p]\n", t, t->sched(), t->sched()->get_budget_sc());
+  //if (M_SCHEDULER_DEBUG) printf("SCHEDULER> next to run: C[%p]---PSC[%p]---BSC[%p]\n", t, t->sched(), t->sched()->get_budget_sc());
   //(void)t;
   //panic("c: schedule_switch_to_locked not available\n");
   // Must be called with CPU lock held
@@ -1026,8 +1157,8 @@ Context::schedule_switch_to_locked(Context *t)
   //Sched_context::Ready_queue &rq = Sched_context::rq.current();
   Ready_queue &rq { Ready_queue::rq.current() };
   // Switch to destination thread's scheduling context
-  if (rq.current_sched() != t->sched())
-    rq.set_current_sched(t->sched());
+  if (rq.current() != t)
+    rq.set_current(t);
 
   if (EXPECT_FALSE(t == this))
     return switch_handle_drq();
@@ -1050,7 +1181,7 @@ Context::deblock_and_schedule(Context *to)
   //(void)to;
   //panic("c: deblock_and_schedule not available\n");
   //if (Sched_context::rq.current().deblock(to->sched(), sched(), true))
-  if (Ready_queue::rq.current().deblock(to->sched(), sched(), true))
+  if (Ready_queue::rq.current().deblock(to, this, true))
     {
       switch_to_locked(to);
       return true;
@@ -1099,9 +1230,9 @@ Context::switch_exec_locked(Context *t, enum Helping_mode mode = Not_Helping)
 
   if (EXPECT_FALSE(t->running_on_different_cpu()))
     {
-      if (!t->in_ready_list())
+      if (!t->in_ready_queue())
         //Sched_context::rq.current().ready_enqueue(t->sched());
-        Ready_queue::rq.current().ready_enqueue(t->sched());
+        Ready_queue::rq.current().ready_enqueue(t);
       return Switch::Failed;
     }
 
@@ -1449,7 +1580,7 @@ Context::xcpu_state_change(Mword mask, Mword add, bool lazy_q = false)
   state_change_dirty(mask, add);
   if (add & Thread_ready_mask)
     //return Sched_context::rq.current().deblock(sched(), current()->sched(), lazy_q);
-    return Ready_queue::rq.current().deblock(sched(), current()->sched(), lazy_q);
+    return Ready_queue::rq.current().deblock(this, current(), lazy_q);
   return false;
 }
 
@@ -1654,10 +1785,10 @@ Context::enqueue_drq(Drq *rq)
 
   bool do_sched = _drq_q.execute_request(rq, Drq_q::No_drop, true);
   if (   access_once(&_home_cpu) == current_cpu()
-      && (state() & Thread_ready_mask) && !sched()->in_ready_queue())
+      && (state() & Thread_ready_mask) && !in_ready_queue())
     {
       //Sched_context::rq.current().ready_enqueue(sched());
-      Ready_queue::rq.current().ready_enqueue(sched());
+      Ready_queue::rq.current().ready_enqueue(this);
       return true;
       //SC_Scheduler::deblock(this->sched());
       //return true;
@@ -2085,14 +2216,14 @@ Context::_execute_drq(Drq *rq, bool offline_cpu = false)
   if (EXPECT_FALSE(!offline_cpu && home_cpu() != current_cpu()))
     return false;
 
-  if (!in_ready_list() && (state(false) & Thread_ready_mask))
+  if (!in_ready_queue() && (state(false) & Thread_ready_mask))
     {
       if (EXPECT_FALSE(offline_cpu))
         //Sched_context::rq.cpu(home_cpu()).ready_enqueue(sched());
-        Ready_queue::rq.cpu(home_cpu()).ready_enqueue(sched());
+        Ready_queue::rq.cpu(home_cpu()).ready_enqueue(this);
       else
         //Sched_context::rq.current().ready_enqueue(sched());
-        Ready_queue::rq.current().ready_enqueue(sched());
+        Ready_queue::rq.current().ready_enqueue(this);
 
       return true;
     }

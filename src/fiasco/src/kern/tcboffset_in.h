@@ -2,9 +2,9 @@
   DUMP_MEMBER1 (THREAD, Context, _kernel_sp,		KERNEL_SP)
   DUMP_MEMBER1 (THREAD, Context, _lock_cnt,		LOCK_CNT)
 #if 0
-  DUMP_MEMBER1 (THREAD, Context, _sched_context,	SCHED_CONTEXT)
-#endif
   DUMP_MEMBER1 (THREAD, Context, _sched,		SCHED)
+#endif
+  DUMP_MEMBER1 (THREAD, Context, _sched_context,	SCHED_COND)
   DUMP_MEMBER1 (THREAD, Context, _fpu_state,		FPU_STATE)
   DUMP_MEMBER1 (THREAD, Context, _consumed_time,	CONSUMED_TIME)
   DUMP_MEMBER1 (THREAD, Thread, _caller,		REPLY_CAP)
@@ -37,8 +37,8 @@
   DUMP_MEMBER1 (SCHED_CONTEXT, Sched_context,_preemption_time,	PREEMPTION_TIME)
   DUMP_MEMBER1 (SCHED_CONTEXT, Sched_context,_prev,		PREV)
   DUMP_MEMBER1 (SCHED_CONTEXT, Sched_context,_next,		NEXT)
+  DUMP_OFFSET  (SCHED_COND, MAX, sizeof (Sched_cond))
 #endif
-  DUMP_OFFSET  (SCHED_CONTEXT, MAX, sizeof (Sched_context))
 
   DUMP_MEMBER1 (MEM_SPACE, Mem_space, _dir,                     PGTABLE)
 
