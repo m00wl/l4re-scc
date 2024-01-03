@@ -38,16 +38,22 @@ public:
   Sched_constraint *get_next() const
   { return _next; }
 
+  void set_next(Sched_constraint *sc)
+  { _next = sc; }
+
   Context *get_blocked() const
   { return _blocked[0]; }
 
   void set_blocked(Context *c)
   { _blocked[0] = c; }
 
-private:
-  enum Operation
-  { Test = 0, };
+  enum Specialization
+  {
+    Budget_sc,
+    Time_window_sc,
+  };
 
+private:
   Ram_quota *_quota;
   Sched_constraint *_next;
   bool _run;
@@ -166,12 +172,24 @@ private:
     Budget_sc *_sc;
   };
 
+  enum Operation
+  {
+    Test,
+    Print,
+  };
+
   Unsigned64 _budget;
   Unsigned64 _period;
   Unsigned64 _left;
   Unsigned64 _next_repl;
-
   Budget_timeout _repl_timeout;
+};
+
+class Timewindow_sc : public Sched_constraint
+{
+private:
+  Unsigned64 _min;
+  Unsigned64 _max;
 };
 
 // --------------------------------------------------------------------------
@@ -231,50 +249,50 @@ Sched_constraint::sched_classes()
   return 1UL << (-L4_sched_param_fixed_prio::Class);
 }
 
-PRIVATE
-L4_msg_tag
-Sched_constraint::test()
-{
-  printf("SC[%p]: SYSCALL!\n", this);
-  return commit_result(0);
-}
-
 PUBLIC
 void
-Sched_constraint::invoke(L4_obj_ref self, L4_fpage::Rights rights,
-                      Syscall_frame *f, Utcb *utcb) override
+Sched_constraint::invoke(L4_obj_ref, L4_fpage::Rights, Syscall_frame *f, Utcb *)
+                  override
 {
-  (void)rights;
-
-  L4_msg_tag res(L4_msg_tag::Schedule);
-
-  if (EXPECT_TRUE(self.op() & L4_obj_ref::Ipc_send))
-  {
-    switch (utcb->values[0])
-    {
-      case Test: res = test(); break;
-      default:   res = commit_result(-L4_err::ENosys); break;
-    }
-  }
-
-  f->tag(res);
+  f->tag(commit_result(-L4_err::ENosys));
 }
 
 namespace {
 
 static Kobject_iface * FIASCO_FLATTEN
-sched_context_factory(Ram_quota *q, Space *, L4_msg_tag, Utcb const *, int *err)
+sched_constraint_factory(Ram_quota *q, Space *, L4_msg_tag t, Utcb const *u,
+                         int *err)
 {
+  if (t.words() != 3)
+  {
+    *err = L4_err::EInval;
+    return nullptr;
+  }
+
   *err = L4_err::ENomem;
-  panic("creating SCs from userspace is not supported yet.");
-  //return Sched_context::create(q);
+  Sched_constraint *res;
+
+  Sched_constraint::Specialization const *type = reinterpret_cast<Sched_constraint::Specialization const *>(&(u->values[2]));
+
+  switch (*type)
+  {
+    case Sched_constraint::Specialization::Budget_sc:
+      res = Budget_sc::create(q);
+      break;
+    default:
+      *err = L4_err::EInval;
+      res = nullptr;
+      break;
+  }
+
+  return res;
 }
 
 static inline void __attribute__((constructor)) FIASCO_INIT
 register_factory()
 {
-  Kobject_iface::set_factory(L4_msg_tag::Label_sched_context,
-                             sched_context_factory);
+  Kobject_iface::set_factory(L4_msg_tag::Label_sched_constraint,
+                             sched_constraint_factory);
 }
 
 }
@@ -517,5 +535,43 @@ Budget_sc::period_expired()
 
   //reschedule, if the replenished thread can preempt the current thread.
   return true;
+}
+
+PUBLIC
+void
+Budget_sc::invoke(L4_obj_ref self, L4_fpage::Rights rights, Syscall_frame *f,
+                  Utcb *utcb) override
+{
+  (void)rights;
+
+  L4_msg_tag res(L4_msg_tag::Schedule);
+
+  if (EXPECT_TRUE(self.op() & L4_obj_ref::Ipc_send))
+  {
+    switch (utcb->values[0])
+    {
+      case Test: res = test(); break;
+      case Print: res = print(); break;
+      default:   res = commit_result(-L4_err::ENosys); break;
+    }
+  }
+
+  f->tag(res);
+}
+
+PRIVATE
+L4_msg_tag
+Budget_sc::test()
+{
+  printf("SC[%p]: SYSCALL test!\n", this);
+  return commit_result(0);
+}
+
+PRIVATE
+L4_msg_tag
+Budget_sc::print()
+{
+  printf("SC[%p]: SYSCALL print!\n", this);
+  return commit_result(0);
 }
 

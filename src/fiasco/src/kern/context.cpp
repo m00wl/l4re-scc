@@ -918,6 +918,58 @@ Context::set_sched_context(Sched_constraint *sc)
 { _sched_context = sc; }
 
 PUBLIC
+void
+Context::attach_sc(Sched_constraint *sc)
+{
+  assert(sc);
+  assert(!sc->get_next());
+
+  if (!_sched_context)
+  {
+    _sched_context = sc;
+    sc->inc_ref();
+    return;
+  }
+
+  Sched_constraint *tail = _sched_context;
+
+  while (tail->get_next())
+    tail = tail->get_next();
+
+  tail->set_next(sc);
+  sc->inc_ref();
+}
+
+PUBLIC
+void
+Context::detach_sc(Sched_constraint *sc)
+{
+  assert(sc);
+
+  Sched_constraint *pre = nullptr;
+  Sched_constraint *cur = _sched_context;
+
+  if (cur && cur == sc)
+  {
+    _sched_context = cur->get_next();
+    cur->dec_ref();
+    return;
+  }
+
+  while (cur && cur != sc)
+  {
+    pre = cur;
+    cur = cur->get_next();
+  }
+
+  if (!cur)
+    return;
+
+  pre->set_next(cur->get_next());
+  cur->dec_ref();
+}
+
+PUBLIC
 bool
 Context::in_ready_queue() const
 { return cxx::Sd_list<Context>::in_list(this); }

@@ -24,7 +24,7 @@ enum Tbuf_entry_fixed
 class Tb_entry;
 class Context;
 class Space;
-class Sched_context;
+//class Sched_context;
 class Syscall_frame;
 class Trap_state;
 class Tb_entry_formatter;

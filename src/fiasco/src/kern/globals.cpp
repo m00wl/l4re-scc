@@ -43,10 +43,9 @@ public:
     Iommu         =  8,
     Jdb           = 10,
     Smc           = 11,
-    Sched_context = 12,
 
     First_alloc_cap = Log,
-    Num_alloc       = 8,
+    Num_alloc       = 7,
     End_alloc_cap   = First_alloc_cap + Num_alloc,
   };
 

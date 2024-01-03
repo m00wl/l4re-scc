@@ -24,7 +24,7 @@ Kernel_thread::init_workload()
   Cap_index const C_factory = Cap_index(Initial_kobjects::Factory);
   Cap_index const C_thread  = Cap_index(Initial_kobjects::Thread);
   Cap_index const C_pager   = Cap_index(Initial_kobjects::Pager);
-  Cap_index const C_sched_context = Cap_index(Initial_kobjects::Sched_context);
+  //Cap_index const C_sched_context = Cap_index(Initial_kobjects::Sched_context);
 
   auto g = lock_guard(cpu_lock);
 
