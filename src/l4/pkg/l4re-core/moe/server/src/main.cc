@@ -16,7 +16,6 @@
 #include <l4/sys/utcb.h>
 #include <l4/sys/debugger.h>
 #include <l4/sys/scheduler>
-#include <l4/sys/sched_context>
 #include <l4/sys/thread>
 #include <l4/sys/cxx/ipc_server_loop>
 #include <l4/re/error_helper>
@@ -491,7 +490,6 @@ static void init_env()
   my_env.factory(L4_BASE_FACTORY_CAP);
   my_env.log(L4_BASE_LOG_CAP);
   my_env.scheduler(L4_BASE_SCHEDULER_CAP);
-  my_env.sched_context(L4_BASE_SCHED_CONTEXT_CAP);
 }
 
 static __attribute__((used, section(".preinit_array")))
@@ -521,10 +519,6 @@ int main(int argc, char**argv)
   //Dbg::set_level(Dbg::Info | Dbg::Warn | Dbg::Boot);
 
   info.printf("Hello world\n");
-
-  //l4_msgtag_t test = L4Re::Env::env()->sched_context()->test();
-  //if (l4_msgtag_has_error(test))
-  //  info.printf("sc syscall had errors! msgtag: %lX\n", test.raw);
 
   l4_msgtag_t res = L4Re::Env::env()->scheduler()
     ->run_thread(L4::Cap<L4::Thread>(L4_BASE_THREAD_CAP), l4_sched_param(0xff));

@@ -38,9 +38,6 @@ public:
   virtual int run_thread(L4::Cap<L4::Thread> thread,
                          l4_sched_param_t const &sp) = 0;
 
-  virtual int run_thread3(L4::Cap<L4::Thread> thread,
-                          L4::Cap<L4::Sched_context> sc) = 0;
-
   virtual int idle_time(l4_sched_cpu_set_t const &cpus,
                         l4_kernel_clock_t &us) = 0;
 
@@ -85,20 +82,6 @@ public:
     return this_svr()->run_thread(t, sp);
   }
 
-  long op_run_thread3(L4::Scheduler::Rights, L4::Ipc::Snd_fpage thread,
-                     L4::Ipc::Snd_fpage sc)
-  {
-    L4::Cap<L4::Thread> t = this_svr()->received_thread(thread);
-    if (!t.is_valid())
-      return -L4_EINVAL;
-
-    L4::Cap<L4::Sched_context> s = this_svr()->received_sc(sc);
-    if (!s.is_valid())
-      return -L4_EINVAL;
-
-    return this_svr()->run_thread3(t, s);
-  }
-
 protected:
   SVR const *this_svr() const { return static_cast<SVR const *>(this); }
   SVR *this_svr() { return static_cast<SVR *>(this); }
@@ -120,7 +103,6 @@ public:
 
   Scheduler_svr(Scheduler_interface *s) : Icu(1, &_scheduler_irq), _sched(s) {}
   virtual L4::Cap<L4::Thread> received_thread(L4::Ipc::Snd_fpage const &fp) = 0;
-  virtual L4::Cap<L4::Sched_context> received_sc(L4::Ipc::Snd_fpage const &fp) = 0;
   virtual L4::Ipc_svr::Server_iface *server_iface() const = 0;
   virtual ~Scheduler_svr() = 0;
 
@@ -133,9 +115,6 @@ public:
 
   int run_thread(L4::Cap<L4::Thread> thread, l4_sched_param_t const &sp)
   { return _sched->run_thread(thread, sp); }
-
-  int run_thread3(L4::Cap<L4::Thread> thread, L4::Cap<L4::Sched_context> sc)
-  { return _sched->run_thread3(thread, sc); }
 
   int idle_time(l4_sched_cpu_set_t const &cpus, l4_kernel_clock_t &us)
   { return _sched->idle_time(cpus, us); }

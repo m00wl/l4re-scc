@@ -14,15 +14,15 @@
 int
 main(void)
 {
-  //for (;;)
-  //  {
-  //    puts("Hello World!");
-  //    sleep(1);
-  //  }
-  for (int i = 0; i < 50000; i++)
-  {
-    printf("%d\n", i);
-  }
+  for (;;)
+    {
+      puts("Hello World!");
+      sleep(1);
+    }
+  //for (int i = 0; i < 50000; i++)
+  //{
+  //  printf("%d\n", i);
+  //}
 
-  for (;;) {}
+  //for (;;) {}
 }

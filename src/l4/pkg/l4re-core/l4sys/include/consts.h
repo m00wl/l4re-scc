@@ -360,11 +360,6 @@ enum l4_default_caps_t
    * environment.
    */
   L4_BASE_ARM_SMCCC_CAP = 11UL << L4_CAP_SHIFT,
-  /**
-   * TOMO: doc this.
-   * Capability selector for a scheduling context.
-   */
-  L4_BASE_SCHED_CONTEXT_CAP = 12UL << L4_CAP_SHIFT,
 
   /// \internal helper must be last before L4_BASE_CAPS_LAST
   L4_BASE_CAPS_LAST_P1,

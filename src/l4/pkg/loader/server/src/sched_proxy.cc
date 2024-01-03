@@ -160,12 +160,6 @@ Sched_proxy::run_thread(L4::Cap<L4::Thread> thread, l4_sched_param_t const &sp)
 }
 
 int
-Sched_proxy::run_thread3(L4::Cap<L4::Thread> thread, L4::Cap<L4::Sched_context> sc)
-{
-  return l4_error(L4Re::Env::env()->scheduler()->run_thread3(thread, sc));
-}
-
-int
 Sched_proxy::idle_time(l4_sched_cpu_set_t const &, l4_kernel_clock_t &)
 { return -L4_ENOSYS; }
 
@@ -177,15 +171,6 @@ Sched_proxy::received_thread(L4::Ipc::Snd_fpage const &fp)
     return L4::Cap<L4::Thread>::Invalid;
 
   return server_iface()->rcv_cap<L4::Thread>(0);
-}
-
-L4::Cap<L4::Sched_context>
-Sched_proxy::received_sc(L4::Ipc::Snd_fpage const &fp)
-{
-  if (!fp.cap_received())
-    return L4::Cap<L4::Sched_context>::Invalid;
-
-  return server_iface()->rcv_cap<L4::Sched_context>(1);
 }
 
 void

@@ -1,0 +1,54 @@
+#pragma once
+
+#include <l4/sys/kernel_object.h>
+#include <l4/sys/ipc.h>
+#include <l4/sys/capability>
+#include <l4/sys/cxx/ipc_iface>
+
+#include <cstdio>
+
+namespace L4 {
+
+class Sched_constraint
+{
+public:
+  enum Type
+  {
+    Budget_sc,
+    Time_window_sc,
+  };
+
+};
+
+class L4_EXPORT Budget_sc :
+  public Kobject_t<Budget_sc, L4::Kobject, L4_PROTO_SCHED_CONSTRAINT>
+{
+public:
+  enum L4_budget_sc_ops
+  {
+    L4_BUDGET_SC_TEST_OP = 0UL,
+    L4_BUDGET_SC_PRINT_OP = 1UL,
+  };
+
+  L4_INLINE_RPC_OP(L4_BUDGET_SC_TEST_OP, l4_msgtag_t, test, ());
+  L4_INLINE_RPC_OP(L4_BUDGET_SC_PRINT_OP, l4_msgtag_t, print, ());
+
+  typedef L4::Typeid::Rpcs_sys<test_t, print_t> Rpcs;
+};
+
+class L4_EXPORT Time_window_sc :
+  public Kobject_t<Time_window_sc, L4::Kobject, L4_PROTO_SCHED_CONSTRAINT>
+{
+public:
+  enum L4_time_window_sc_ops
+  {
+    L4_TIME_WINDOW_SC_PRINT_OP = 16UL,
+  };
+
+  L4_INLINE_RPC_OP(L4_TIME_WINDOW_SC_PRINT_OP, l4_msgtag_t, print, ());
+
+  typedef L4::Typeid::Rpcs_sys<print_t> Rpcs;
+};
+
+}
+
