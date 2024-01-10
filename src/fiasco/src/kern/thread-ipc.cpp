@@ -502,6 +502,10 @@ Thread::activate_ipc_partner(Thread *partner, Cpu_number current_cpu,
     Context *cs = rq.current();
     do_switch = do_switch && (closed_wait || cs != this);
     partner->state_change_dirty(~Thread_ipc_transfer, Thread_ready);
+    // TOMO: we disable the direct switch via switch_exec_locked,
+    //       because this would not set ready_queue::current.
+    //       We need the ready_queue otherwise sched_context activation/
+    //       deactivation would not work correctly.
     if (do_switch)
       {
         schedule_if(switch_exec_locked(partner, Not_Helping) != Switch::Ok);

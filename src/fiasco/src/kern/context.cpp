@@ -754,9 +754,6 @@ Context::schedule()
   //assert (!Sched_context::rq.current().schedule_in_progress);
   assert (!Ready_queue::rq.current().schedule_in_progress);
 
-  // we give up the CPU as a helpee, so we have no helper anymore
-  if (EXPECT_FALSE(helper() != this))
-    set_helper(Not_Helping);
 
   // if we are a thread on a foreign CPU we must ask the kernel context to
   // schedule for us
@@ -803,6 +800,8 @@ Context::schedule()
       // Ensure ready-list sanity
       assert (next_to_run);
 
+      if(!next_to_run->sched_context_is_ok())
+        rq->ready_dequeue(next_to_run);
       if (EXPECT_FALSE(!(next_to_run->state() & Thread_ready_mask)))
         rq->ready_dequeue(next_to_run);
       else switch (schedule_switch_to_locked(next_to_run))
@@ -911,11 +910,124 @@ Sched_constraint *
 Context::get_sched_context() const
 { return _sched_context; }
 
-// temporary:
+//PUBLIC
+//void
+//Context::set_sched_context(Sched_constraint *sc)
+//{ _sched_context = sc; }
+
 PUBLIC
 void
-Context::set_sched_context(Sched_constraint *sc)
-{ _sched_context = sc; }
+Context::switch_sched_context(Context *to)
+{
+  Context *from { helper() };
+
+  // The old thread gives up the CPU as a helpee, so it has no helper anymore.
+  if (EXPECT_FALSE(from != this))
+    set_helper(Not_Helping);
+
+  // Don't switch the scheduling context, if the old thread is helping the
+  // new one.
+  if (EXPECT_FALSE(to->helper() == this))
+    return;
+
+  // The old thread might have had a helper and might run with their
+  // scheduling context.
+  // Be sure to deactivate the correct scheduling context here.
+  from->deactivate_sched_context();
+  to->activate_sched_context();
+}
+
+PRIVATE
+bool
+Context::sched_context_is_ok()
+{
+  // TOMO: should probably lock this.
+  Sched_constraint *sc { _sched_context };
+
+  while (sc)
+  {
+    if (!sc->can_run())
+    {
+      sc->set_blocked(this);
+      return false;
+    }
+    sc = sc->get_next();
+  }
+
+  return true;
+}
+
+PUBLIC
+void
+Context::deactivate_sched_context()
+{
+  Sched_constraint *sc { _sched_context };
+
+  while (sc)
+  {
+    sc->deactivate();
+    sc = sc->get_next();
+  }
+}
+
+PUBLIC
+void
+Context::activate_sched_context()
+{
+  Sched_constraint *sc { _sched_context };
+
+  while (sc)
+  {
+    sc->activate();
+    sc = sc->get_next();
+  }
+}
+
+PROTECTED
+void
+Context::clear_sched_context()
+{
+  // TOMO: should probably lock this.
+  Sched_constraint *sc { _sched_context };
+  _sched_context = nullptr;
+
+  while (sc)
+  {
+    sc->dec_ref();
+    sc = sc->get_next();
+  }
+}
+
+PUBLIC
+bool
+Context::sched_context_contains(Sched_constraint *sc)
+{
+  Sched_constraint *i { _sched_context };
+
+  while (i)
+  {
+    if (i == sc)
+      return true;
+    i = i->get_next();
+  }
+
+  return false;
+}
+
+PROTECTED
+void
+Context::print_sched_context()
+{
+  Sched_constraint *sc { _sched_context };
+
+  printf("C[%p]:", this);
+  while (sc)
+  {
+    printf("---SC[%p]", sc);
+    sc = sc->get_next();
+  }
+  printf(">\n");
+}
 
 PUBLIC
 void
@@ -931,7 +1043,7 @@ Context::attach_sc(Sched_constraint *sc)
     return;
   }
 
-  Sched_constraint *tail = _sched_context;
+  Sched_constraint *tail { _sched_context };
 
   while (tail->get_next())
     tail = tail->get_next();
@@ -946,8 +1058,8 @@ Context::detach_sc(Sched_constraint *sc)
 {
   assert(sc);
 
-  Sched_constraint *pre = nullptr;
-  Sched_constraint *cur = _sched_context;
+  Sched_constraint *pre { nullptr };
+  Sched_constraint *cur { _sched_context };
 
   if (cur && cur == sc)
   {
@@ -1213,7 +1325,10 @@ Context::schedule_switch_to_locked(Context *t)
     rq.set_current(t);
 
   if (EXPECT_FALSE(t == this))
+  {
+    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> we continue to run C[%p]\n", this);
     return switch_handle_drq();
+  }
 
   return switch_exec_locked(t, Not_Helping);
 }
@@ -1256,6 +1371,7 @@ PUBLIC
 Context::Switch FIASCO_WARN_RESULT //L4_IPC_CODE
 Context::switch_exec_locked(Context *t, enum Helping_mode mode = Not_Helping)
 {
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> we run C[%p]\n", t);
   //(void)t;
   //(void)mode;
   //panic("c: switch_exec_locked not available\n");
@@ -1310,6 +1426,7 @@ Context::switch_exec_locked(Context *t, enum Helping_mode mode = Not_Helping)
     update_ready_list();
 
   t->set_current_cpu(get_current_cpu());
+
   switch_fpu(t);
   switch_cpu(t);
 
@@ -1320,6 +1437,7 @@ PUBLIC
 Context::Switch
 Context::switch_exec_helping(Context *t, Mword const *lock, Mword val)
 {
+  panic("scheduling context activation after switch_exec_helping not implemented");
   // Must be called with CPU lock held
   assert (t);
   assert (cpu_lock.test());

@@ -48,8 +48,8 @@ Timeslice_timeout::expired() override
     // the SCs repl timeout will enqueue again later.
     //sched->get_quant_sc()->replenish();
     //rq.requeue(sched);
-    rq.invalidate_current();
-    rq.ready_dequeue(current);
+    //rq.invalidate_current();
+    //rq.ready_dequeue(current);
   }
 
   return true;

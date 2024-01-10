@@ -59,6 +59,8 @@ public:
     Op_set_tpidruro_arm = 0x10,
     Op_set_segment_base_amd64 = 0x12,
     Op_segment_info_amd64 = 0x13,
+    Op_clear_scs = 0x14,
+    Op_attach_sc = 0x15,
   };
 
   enum Control_flags
@@ -332,7 +334,7 @@ Thread::alloc_sched_context()
   assert(bsc);
   bsc->inc_ref();
   bsc->set_blocked(this);
-  set_sched_context(bsc);
+  attach_sc(bsc);
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> C[addr:%p, cpu:%d]---BSC[%p]\n", this, cxx::int_value<Cpu_number>(this->home_cpu()), bsc);
 
   //// set pointers.
@@ -472,7 +474,7 @@ Thread::handle_timer_interrupt()
     {
       if (M_TIMER_DEBUG) printf("TIMER> reschedule after timer interrupt\n");
       schedule();
-      assert (timeslice_timeout.cpu(current_cpu())->is_set());	// Coma check
+      //assert (timeslice_timeout.cpu(current_cpu())->is_set());	// Coma check
     }
 
 }

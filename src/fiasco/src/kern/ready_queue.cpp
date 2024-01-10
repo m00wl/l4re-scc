@@ -161,33 +161,33 @@ void
 Ready_queue::set_current(Context *c)
 {
   assert (c);
-  // Save remainder of previous timeslice or refresh it, unless it had
-  // been invalidated
-  Timeout * const tt = timeslice_timeout.current();
-  Unsigned64 clock = Timer::system_clock();
-  if (Context *s = current())
-  {
-    Signed64 left = tt->get_timeout(clock);
-    if (left > 0)
-      // TOMO: assumption about SC here!
-      static_cast<Budget_sc *>(s->get_sched_context())->set_left(left);
-    else
-    {
-      //s->get_quant_sc()->replenish();
-      printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>> BSC[%p]: budget overrun\n", s);
-      // TOMO: assumption about SC here!
-      static_cast<Budget_sc *>(s->get_sched_context())->set_left(0);
-    }
+  //// Save remainder of previous timeslice or refresh it, unless it had
+  //// been invalidated
+  //Timeout * const tt = timeslice_timeout.current();
+  //Unsigned64 clock = Timer::system_clock();
+  //if (Context *s = current())
+  //{
+  //  Signed64 left = tt->get_timeout(clock);
+  //  if (left > 0)
+  //    // TOMO: assumption about SC here!
+  //    static_cast<Budget_sc *>(s->get_sched_context())->set_left(left);
+  //  else
+  //  {
+  //    //s->get_quant_sc()->replenish();
+  //    printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>> BSC[%p]: budget overrun\n", s);
+  //    // TOMO: assumption about SC here!
+  //    static_cast<Budget_sc *>(s->get_sched_context())->set_left(0);
+  //  }
 
-    LOG_SCHED_SAVE(s);
-  }
+  //  LOG_SCHED_SAVE(s);
+  //}
 
-  // Program new end-of-timeslice timeout
-  tt->reset();
-  if (M_TIMER_DEBUG) printf("TIMER> setting timeslice timeout @ %llu\n", clock + static_cast<Budget_sc *>(c->get_sched_context())->get_left());
-  //tt->set(clock + c->get_budget_sc()->get_left(), current_cpu());
-  // TOMO: assumption about SC here!
-  tt->set(clock + static_cast<Budget_sc *>(c->get_sched_context())->get_left(), current_cpu());
+  //// Program new end-of-timeslice timeout
+  //tt->reset();
+  //if (M_TIMER_DEBUG) printf("TIMER> setting timeslice timeout @ %llu\n", clock + static_cast<Budget_sc *>(c->get_sched_context())->get_left());
+  ////tt->set(clock + c->get_budget_sc()->get_left(), current_cpu());
+  //// TOMO: assumption about SC here!
+  //tt->set(clock + static_cast<Budget_sc *>(c->get_sched_context())->get_left(), current_cpu());
 
   // Make this timeslice current
   activate(c);

@@ -86,6 +86,7 @@ Kernel_thread::bootstrap()
   Timer::init_system_clock();
   //Sched_context::rq.current().set_idle(this->sched());
   alloc_sched_context();
+  activate_sched_context();
   // TOMO: assumption about SC here!
   static_cast<Budget_sc *>(get_sched_context())->calc_and_schedule_next_repl();
   //Ready_queue::rq.current().set_idle(this->sched());
@@ -189,6 +190,7 @@ PUBLIC inline NEEDS["processor.h"]
 void
 Kernel_thread::idle_op()
 {
+  //panic("idle");
   //printf("hello from idle.\n");
   if (Config::hlt_works_ok)
     Proc::halt();			// stop the CPU, waiting for an int

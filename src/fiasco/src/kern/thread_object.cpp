@@ -166,6 +166,12 @@ Thread_object::invoke(L4_obj_ref self, L4_fpage::Rights rights,
     case Op_vcpu_control:
       tag = sys_vcpu_control(rights, f->tag(), utcb, out);
       break;
+    case Op_clear_scs:
+      tag = sys_clear_scs();
+      break;
+    case Op_attach_sc:
+      tag = sys_attach_sc(f->tag(), utcb);
+      break;
     default:
       tag = invoke_arch(f->tag(), utcb, out);
       break;
@@ -518,6 +524,33 @@ Thread_object::sys_vcpu_control(L4_fpage::Rights, L4_msg_tag const &tag,
   return commit_result(0);
 }
 
+PRIVATE inline NOEXPORT
+L4_msg_tag
+Thread_object::sys_clear_scs()
+{
+  print_sched_context();
+  clear_sched_context();
+  print_sched_context();
+
+  return commit_result(0);
+}
+
+PRIVATE inline NOEXPORT
+L4_msg_tag
+Thread_object::sys_attach_sc(L4_msg_tag const &tag, Utcb const *utcb)
+{
+  L4_msg_tag t = tag;
+  Ko::Rights rights;
+  Sched_constraint *sc = Ko::deref<Sched_constraint>(&t, utcb, &rights);
+  if (!sc)
+    return tag;
+
+  print_sched_context();
+  attach_sc(sc);
+  print_sched_context();
+
+  return commit_result(0);
+}
 
 // -------------------------------------------------------------------
 // Thread::ex_regs class system calls
@@ -666,6 +699,7 @@ Thread_object::sys_thread_switch(L4_msg_tag const & /*tag*/, Utcb const * /*utcb
       // Yield current global timeslice
       cs->owner()->switch_sched(cs->id() ? cs->next() : cs);
 #endif
+  // TOMO: we don't use the timeslice timeout anymore, therefore this is broken.
   reinterpret_cast<Utcb::Time_val*>(out->values)->t
     = timeslice_timeout.current()->get_timeout(Timer::system_clock());
   curr->schedule();
