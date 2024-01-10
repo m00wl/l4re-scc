@@ -21,6 +21,7 @@ public:
 };
 
 class L4_EXPORT Budget_sc :
+  public Sched_constraint,
   public Kobject_t<Budget_sc, L4::Kobject, L4_PROTO_SCHED_CONSTRAINT>
 {
 public:
@@ -37,6 +38,7 @@ public:
 };
 
 class L4_EXPORT Time_window_sc :
+  public Sched_constraint,
   public Kobject_t<Time_window_sc, L4::Kobject, L4_PROTO_SCHED_CONSTRAINT>
 {
 public:

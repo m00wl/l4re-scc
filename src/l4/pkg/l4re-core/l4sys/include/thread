@@ -29,6 +29,8 @@
 
 namespace L4 {
 
+class Sched_constraint;
+
 /**
  * C++ L4 kernel thread interface, see \ref l4_thread_api for the C interface.
  *
@@ -498,5 +500,10 @@ public:
   {
     return l4_ipc_call(cap(), todo.utcb, l4_msgtag(L4_PROTO_THREAD, todo.cnt, 0, 0), L4_IPC_NEVER);
   }
+
+  L4_INLINE_RPC_OP(L4_THREAD_CLEAR_SCS_OP, l4_msgtag_t, clear_scs, ());
+  L4_INLINE_RPC_OP(L4_THREAD_ATTACH_SC_OP, l4_msgtag_t, attach_sc, (Ipc::Cap<Sched_constraint> sc));
+
+  typedef L4::Typeid::Rpcs_sys<clear_scs_t, attach_sc_t> Rpcs;
 };
 }
