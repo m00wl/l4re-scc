@@ -50,6 +50,8 @@ public:
 
   virtual void deactivate() = 0;
   virtual void activate() = 0;
+  virtual void migrate_away() = 0;
+  virtual void migrate_to(Cpu_number) = 0;
 
   enum Type
   {
@@ -291,6 +293,16 @@ void
 Quant_sc::activate() override
 { panic("Quant_sc::activate not implemented."); }
 
+PUBLIC
+void
+Quant_sc::migrate_away() override
+{ panic("Quant_sc::migrate_away not implemented."); }
+
+PUBLIC
+void
+Quant_sc::migrate_to(Cpu_number) override
+{ panic("Quant_sc::migrate_to not implemented."); }
+
 static Kmem_slab_t<Budget_sc> _budget_sc_allocator("Budget_sc");
 
 PRIVATE static
@@ -345,7 +357,7 @@ Budget_sc::Oob_timeout::expired()
 
 PRIVATE
 void
-Budget_sc::calc_next_repl()
+Budget_sc::calc_and_schedule_next_repl(Cpu_number cpu)
 {
   Unsigned64 now = Timer::system_clock();
   if (now < _next_repl)
@@ -355,27 +367,14 @@ Budget_sc::calc_next_repl()
   unsigned n = diff / _period;
 
   _next_repl += (n + 1) * _period;
-}
 
-PRIVATE
-void
-Budget_sc::program_next_repl_timeout(Cpu_number cpu)
-{
   if (_repl_timeout.is_set())
     _repl_timeout.reset();
   if (M_TIMER_DEBUG) printf("TIMER> BSC[%p]: setting replenishment timeout @ %llu\n", this, _next_repl);
   _repl_timeout.set(_next_repl, cpu);
 }
 
-PUBLIC
-void
-Budget_sc::calc_and_schedule_next_repl()
-{
-  calc_next_repl();
-  program_next_repl_timeout(current_cpu());
-}
-
-PUBLIC
+PRIVATE
 void
 Budget_sc::replenish()
 {
@@ -383,7 +382,7 @@ Budget_sc::replenish()
   set_run(true);
 }
 
-PUBLIC
+PRIVATE
 void
 Budget_sc::timeslice_expired()
 {
@@ -392,14 +391,14 @@ Budget_sc::timeslice_expired()
   set_run(false);
 }
 
-PUBLIC
+PRIVATE
 bool
 Budget_sc::period_expired()
 {
   // TOMO: requeue here?
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> BSC[%p]: period_expired\n", this);
   replenish();
-  calc_and_schedule_next_repl();
+  calc_and_schedule_next_repl(current_cpu());
 
   Ready_queue &rq { Ready_queue::rq.current() };
   //Context *curr = rq.current();
@@ -411,17 +410,6 @@ Budget_sc::period_expired()
       && get_blocked()->state() & Thread_ready_mask)
     rq.ready_enqueue(get_blocked());
 
-  //// TOMO: assumption about SC here!
-  //if (curr && (curr->get_sched_context() == this))
-  //{
-  //  Timeout *const tt = timeslice_timeout.current();
-  //  Unsigned64 clock = Timer::system_clock();
-  //  tt->reset();
-  //  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> we replenished the currently running thread.\n");
-  //  if (M_TIMER_DEBUG) printf("TIMER> setting timeslice timeout @ %llu\n", clock + _left);
-  //  tt->set(clock + _left, current_cpu());
-  //  //rq.requeue(get_blocked());
-  //}
   if (curr && curr->sched_context_contains(this))
   {
     _oob_timeout.reset();
@@ -444,14 +432,6 @@ Budget_sc::deactivate() override
   if (left < 0)
       printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>> BSC[%p]: budget overrun by %lld.\n", this, left * (-1));
 
-  //if (left > 0)
-  //  _left = left;
-  //else
-  //{
-  //  printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>> BSC[%p]: budget overrun by %lld.\n", this, left);
-  //  left = 0;
-  //}
-
   _oob_timeout.reset();
 }
 
@@ -463,6 +443,28 @@ Budget_sc::activate() override
   Unsigned64 clock = Timer::system_clock();
   if (M_TIMER_DEBUG) printf("TIMER> BSC[%p]: setting timeslice timeout @ %llu\n", this, clock + _left);
   _oob_timeout.set(clock + _left, current_cpu());
+}
+
+PUBLIC
+void
+Budget_sc::migrate_away() override
+{
+  //deactivate();
+  _repl_timeout.reset();
+
+  assert(!_oob_timeout.is_set());
+  assert(!_repl_timeout.is_set());
+}
+
+PUBLIC
+void
+Budget_sc::migrate_to(Cpu_number target) override
+{
+  assert(!_oob_timeout.is_set());
+  assert(!_repl_timeout.is_set());
+
+  replenish();
+  calc_and_schedule_next_repl(target);
 }
 
 PUBLIC

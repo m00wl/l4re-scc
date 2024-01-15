@@ -983,6 +983,32 @@ Context::activate_sched_context()
   }
 }
 
+PUBLIC
+void
+Context::migrate_sched_context_away()
+{
+  Sched_constraint *sc { _sched_context };
+
+  while (sc)
+  {
+    sc->migrate_away();
+    sc = sc->get_next();
+  }
+}
+
+PUBLIC
+void
+Context::migrate_sched_context_to(Cpu_number target)
+{
+  Sched_constraint *sc { _sched_context };
+
+  while (sc)
+  {
+    sc->migrate_to(target);
+    sc = sc->get_next();
+  }
+}
+
 PROTECTED
 void
 Context::clear_sched_context()
@@ -1217,9 +1243,10 @@ Context::activate()
 {
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> C[%p]: activated\n", this);
   auto guard = lock_guard(cpu_lock);
-  // TOMO: assumption about SC here!
-  Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
-  b->calc_and_schedule_next_repl();
+  migrate_sched_context_to(current_cpu());
+  //// TOMO: assumption about SC here!
+  //Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
+  //b->calc_and_schedule_next_repl();
   if (xcpu_state_change(~0UL, Thread_ready, true))
     current()->switch_to_locked(this);
 }
@@ -2215,66 +2242,67 @@ IMPLEMENT
 bool
 Context::Pending_rqq::handle_requests(Context **mq)
 {
-  (void)mq;
-  panic("c: Pending_rqq::handle_requests not available\n");
-  ////LOG_MSG_3VAL(current(), "phq", current_cpu(), 0, 0);
-  //if (0)
-  //  printf("CPU[%2u:%p]: Context::Pending_rqq::handle_requests() this=%p\n", cxx::int_value<Cpu_number>(current_cpu()), current(), this);
-  //bool resched = false;
-  //Context *curr = current();
-  //while (1)
-  //  {
-  //    Context *c;
-  //      {
-  //        auto guard = lock_guard(q_lock());
-  //        Queue_item *qi = first();
-  //        if (!qi)
-  //          return resched;
+  //(void)mq;
+  //panic("c: Pending_rqq::handle_requests not available\n");
+  //LOG_MSG_3VAL(current(), "phq", current_cpu(), 0, 0);
+  if (0)
+    printf("CPU[%2u:%p]: Context::Pending_rqq::handle_requests() this=%p\n", cxx::int_value<Cpu_number>(current_cpu()), current(), this);
+  bool resched = false;
+  Context *curr = current();
+  while (1)
+    {
+      Context *c;
+        {
+          auto guard = lock_guard(q_lock());
+          Queue_item *qi = first();
+          if (!qi)
+            return resched;
 
-  //        check (dequeue(qi));
-  //        c = static_cast<Context::Pending_rq *>(qi)->context();
-  //      }
+          check (dequeue(qi));
+          c = static_cast<Context::Pending_rq *>(qi)->context();
+        }
 
-  //    assert (c->check_for_current_cpu());
+      assert (c->check_for_current_cpu());
 
-  //    c->handle_remote_state_change();
-  //    if (EXPECT_FALSE(c->_migration != 0))
-  //      {
-  //        // if the currently executing thread shall be migrated we must defer
-  //        // this until we have handled the whole request queue, otherwise we
-  //        // would miss the remaining requests or execute them on the wrong CPU.
-  //        if (c != curr)
-  //          {
-  //            // we can directly migrate the thread...
-  //            resched |= c->initiate_migration();
+      c->handle_remote_state_change();
+      if (EXPECT_FALSE(c->_migration != 0))
+        {
+          // if the currently executing thread shall be migrated we must defer
+          // this until we have handled the whole request queue, otherwise we
+          // would miss the remaining requests or execute them on the wrong CPU.
+          if (c != curr)
+            {
+              // we can directly migrate the thread...
+              resched |= c->initiate_migration();
 
-  //            // if migrated away skip the resched test below
-  //            if (access_once(&c->_home_cpu) != current_cpu())
-  //              continue;
-  //          }
-  //        else
-  //          *mq = c;
-  //      }
-  //    else
-  //      c->try_finish_migration();
+              // if migrated away skip the resched test below
+              if (access_once(&c->_home_cpu) != current_cpu())
+                continue;
+            }
+          else
+            *mq = c;
+        }
+      else
+        c->try_finish_migration();
 
-  //    if (EXPECT_TRUE(c->drq_pending()))
-  //      {
-  //        if (EXPECT_TRUE(c != curr))
-  //          c->state_add(Thread_drq_ready);
-  //        else
-  //          resched |= c->handle_drq();
-  //      }
+      if (EXPECT_TRUE(c->drq_pending()))
+        {
+          if (EXPECT_TRUE(c != curr))
+            c->state_add(Thread_drq_ready);
+          else
+            resched |= c->handle_drq();
+        }
 
-  //    if (EXPECT_TRUE(c != curr && (c->state() & Thread_ready_mask)))
-  //      {
-  //        Sched_context *cs = (curr->home_cpu() == curr->get_current_cpu())
-  //                          ? curr->sched()
-  //                          : 0;
+      if (EXPECT_TRUE(c != curr && (c->state() & Thread_ready_mask)))
+        {
+          Context *cs = (curr->home_cpu() == curr->get_current_cpu())
+                            ? curr
+                            : 0;
 
-  //        resched |= Sched_context::rq.current().deblock(c->sched(), cs);
-  //      }
-  //  }
+          //resched |= Sched_context::rq.current().deblock(c->sched(), cs);
+          resched |= Ready_queue::rq.current().deblock(c, cs);
+        }
+    }
 }
 
 PUBLIC static inline NEEDS["cpu_call.h"]

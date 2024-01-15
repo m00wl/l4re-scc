@@ -101,8 +101,10 @@ App_cpu_thread::bootstrap(Mword resume)
   {
     // Setup initial timeslice
     //Sched_context::rq.current().set_current_sched(sched());
-    // TOMO: assumption about SC here!
-    static_cast<Budget_sc *>(get_sched_context())->calc_and_schedule_next_repl();
+    //// TOMO: assumption about SC here!
+    //static_cast<Budget_sc *>(get_sched_context())->calc_and_schedule_next_repl();
+    migrate_sched_context_to(ccpu);
+    activate_sched_context();
     Ready_queue::rq.current().set_current(this);
   }
 

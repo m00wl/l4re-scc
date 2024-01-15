@@ -388,7 +388,7 @@ Thread::setup_timer(L4_timeout timeout, Utcb const *utcb, Timeout *timer)
 
 
 PRIVATE inline NEEDS["timer.h"]
-void Thread::goto_sleep(L4_timeout const &t, Sender *sender, Utcb *utcb)
+void Thread::goto_sleep(L4_timeout const &t, Sender * /*sender*/, Utcb *utcb)
 {
   //(void)t;
   //(void)sender;

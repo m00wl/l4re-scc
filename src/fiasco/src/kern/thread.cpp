@@ -683,8 +683,6 @@ PUBLIC
 void
 Thread::set_sched_params(L4_sched_param const *p)
 {
-  //(void)p;
-  //panic("Thread::set_sched_params: sc not available here\n");
   //Prio_sc *sc = this->sched();
 
   // this can actually access the ready queue of a CPU that is offline remotely
@@ -694,19 +692,20 @@ Thread::set_sched_params(L4_sched_param const *p)
   rq.dequeue(this);
 
   set_sched_param(p);
-  //sc->get_quant_sc()->replenish();
-  // TOMO: assumption about SC here!
-  Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
-  b->replenish();
-  b->calc_and_schedule_next_repl();
+  panic("Thread::set_sched_params: sc not available here\n");
+  ////sc->get_quant_sc()->replenish();
+  //// TOMO: assumption about SC here!
+  //Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
+  //b->replenish();
+  //b->calc_and_schedule_next_repl();
 
-  //if (sc == SC_Scheduler::get_current())
-  //  SC_Scheduler::set_current(sc);
-  if (this == rq.current())
-    rq.set_current(this);
+  ////if (sc == SC_Scheduler::get_current())
+  ////  SC_Scheduler::set_current(sc);
+  //if (this == rq.current())
+  //  rq.set_current(this);
 
-  if (state() & Thread_ready_mask) // maybe we could ommit enqueueing current
-    rq.ready_enqueue(this);
+  //if (state() & Thread_ready_mask) // maybe we could ommit enqueueing current
+  //  rq.ready_enqueue(this);
 }
 
 PUBLIC
@@ -876,7 +875,12 @@ Thread::initiate_migration() override
 PUBLIC
 void
 Thread::finish_migration() override
-{ enqueue_timeout_again(); }
+{
+  if (Cpu::online(home_cpu()))
+    migrate_sched_context_to(home_cpu());
+
+  enqueue_timeout_again();
+}
 
 //---------------------------------------------------------------------------
 IMPLEMENTATION [fpu && !ux && lazy_fpu]:
@@ -1109,10 +1113,11 @@ Thread::migrate_away(Migration *inf, bool remote)
   //Prio_sc *sc = sched();
   set_sched_param(inf->sp);
   //sc->get_quant_sc()->replenish();
-  // TOMO: assumption about SC here!
-  Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
-  b->replenish();
-  b->calc_and_schedule_next_repl();
+  migrate_sched_context_away();
+  //// TOMO: assumption about SC here!
+  //Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
+  //b->replenish();
+  //b->calc_and_schedule_next_repl();
   //set_sched(sc);
 
   state_add_dirty(Thread_finish_migration);
@@ -1133,6 +1138,7 @@ Thread::migrate_to(Cpu_number target_cpu, bool)
       return false;
     }
 
+  migrate_sched_context_to(target_cpu);
   bool resched = false;
   if (state() & Thread_ready_mask)
     resched = Ready_queue::rq.current().deblock(this, current());
@@ -1355,11 +1361,12 @@ Thread::migrate_away(Migration *inf, bool remote)
       //Prio_sc *sc = sched();
       set_sched_param(inf->sp);
       //sc->get_quant_sc()->replenish();
-      // TOMO: assumption about SC here!
-      Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
-      b->replenish();
-      b->calc_and_schedule_next_repl();
-      //set_sched(sc);
+      migrate_sched_context_away();
+      //// TOMO: assumption about SC here!
+      //Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
+      //b->replenish();
+      //b->calc_and_schedule_next_repl();
+      ////set_sched(sc);
 
       Mem::mp_wmb();
 

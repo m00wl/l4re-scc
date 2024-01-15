@@ -86,9 +86,10 @@ Kernel_thread::bootstrap()
   Timer::init_system_clock();
   //Sched_context::rq.current().set_idle(this->sched());
   alloc_sched_context();
+  migrate_sched_context_to(current_cpu());
   activate_sched_context();
-  // TOMO: assumption about SC here!
-  static_cast<Budget_sc *>(get_sched_context())->calc_and_schedule_next_repl();
+  //// TOMO: assumption about SC here!
+  //static_cast<Budget_sc *>(get_sched_context())->calc_and_schedule_next_repl();
   //Ready_queue::rq.current().set_idle(this->sched());
   //set_prio(Config::Kernel_prio);
   Kernel_task::kernel_task()->make_current();
