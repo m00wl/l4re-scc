@@ -16,7 +16,9 @@ public:
     Info       = 0,
     Run_thread = 1,
     Idle_time  = 2,
-    Run_thread3 = 3,
+    Set_prio   = 3,
+    Attach_sc  = 4,
+    Detach_sc  = 5,
   };
 
   static Scheduler scheduler;
@@ -125,71 +127,83 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
 
 PRIVATE
 L4_msg_tag
-Scheduler::sys_run3(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
+Scheduler::sys_set_prio(Syscall_frame *f, Utcb const *utcb)
 {
-  //L4_msg_tag tag = f->tag();
-  //Ko::Rights rights;
-  //L4_snd_item_iter snd_items(utcb, tag.words());
+  L4_msg_tag tag { f->tag() };
+  Ko::Rights rights;
 
-  //if (!tag.items())
-  //  return commit_result(-L4_err::EInval);
+  Thread *thread { Ko::deref<Thread>(&tag, utcb, &rights) };
 
-  //Space *const space = ::current()->space();
-  //if (!space)
-  //  __builtin_unreachable();
+  if (!thread)
+    return tag;
 
-  //Thread *thread;
-  //thread = Ko::deref_next<Thread>(&tag, utcb, snd_items, space, &rights);
-  //if (!thread)
-  //  return tag;
+  Unsigned8 prio { static_cast<Unsigned8>(utcb->values[1]) };
 
-  //Prio_sc *sc;
-  //sc = Ko::deref_next<Prio_sc>(&tag, utcb, snd_items, space, &rights);
-  //if (!sc)
-  //  return tag;
-
-  //if (0)
-  //{
-  //  printf("tr: %p\n", thread);
-  //  printf("sc: %p\n", sc);
-  //  printf("tr->sc: %p\n", thread->sched());
-  //  printf("tr->sc.rq: %s\n", thread->sched()->in_ready_queue() ? "y" : "n");
-  //  printf("sc->tr: %p\n", sc->get_context());
-  //}
-
-  //Prio_sc *old_sc = thread->sched();
-  //if (old_sc)
-  //{
-  //  // TOMO: WARNING. resource leak here.
-  //  // At the moment, we don't know if old_sc was created manually in the kernel or dynamically from userspace.
-  //  // Therefore, we also don't know whether we should dec_ref() the old_sc,
-  //  // therefore old_sc might not be deleted later and we have a potential resource leak here.
-  //  // To fix this, we would need to adapt the entire userspace and convert libloader/moe/pthread/etc. to dynamic (explicit) sc allocation.
-  //  Ready_queue &rq { Ready_queue::rq.cpu(thread->home_cpu()) };
-  //  rq.switch_sched(old_sc, sc);
-  //  // TOMO: maybe set to idle thread instead? (should be safer...)
-  //  old_sc->set_context(nullptr);
-  //}
-
-  //thread->set_sched(sc);
-  //sc->set_context(thread);
-
-  //// we fabricate a migration info and go the established way.
-  //Thread::Migration info;
-
-  //// sched_contexts are not concerned with core migration, therefore:
-  //info.cpu = ::current_cpu();
-
-  //// extract scheduling information from the given sched_context.
-  //L4_sched_param_fixed_prio sched_param;
-  //sched_param.sched_class = L4_sched_param_fixed_prio::Class;
-  //sched_param.quantum = sc->get_quant_sc()->get_quantum();
-  //sched_param.prio = sc->get_prio();
-  //info.sp = &sched_param;
-
-  //thread->migrate(&info);
+  thread->change_prio_to(prio);
 
   return commit_result(0);
+}
+
+PRIVATE
+L4_msg_tag
+Scheduler::sys_attach_sc(Syscall_frame *f, Utcb const *utcb)
+{
+  L4_msg_tag tag = f->tag();
+  Ko::Rights rights;
+  L4_snd_item_iter snd_items(utcb, tag.words());
+
+  if (!tag.items())
+    return commit_result(-L4_err::EInval);
+
+  Space *const space = ::current()->space();
+  if (!space)
+    __builtin_unreachable();
+
+  Thread *thread;
+  thread = Ko::deref_next<Thread>(&tag, utcb, snd_items, space, &rights);
+  if (!thread)
+    return tag;
+
+  Sched_constraint *sc;
+  sc = Ko::deref_next<Sched_constraint>(&tag, utcb, snd_items, space, &rights);
+  if (!sc)
+    return tag;
+
+  printf("ready to attach sc now!\n");
+
+  return commit_result(0);
+
+}
+
+PRIVATE
+L4_msg_tag
+Scheduler::sys_detach_sc(Syscall_frame *f, Utcb const *utcb)
+{
+  L4_msg_tag tag = f->tag();
+  Ko::Rights rights;
+  L4_snd_item_iter snd_items(utcb, tag.words());
+
+  if (!tag.items())
+    return commit_result(-L4_err::EInval);
+
+  Space *const space = ::current()->space();
+  if (!space)
+    __builtin_unreachable();
+
+  Thread *thread;
+  thread = Ko::deref_next<Thread>(&tag, utcb, snd_items, space, &rights);
+  if (!thread)
+    return tag;
+
+  Sched_constraint *sc;
+  sc = Ko::deref_next<Sched_constraint>(&tag, utcb, snd_items, space, &rights);
+  if (!sc)
+    return tag;
+
+  printf("ready to detach sc now!\n");
+
+  return commit_result(0);
+
 }
 
 PRIVATE
@@ -304,10 +318,19 @@ Scheduler::kinvoke(L4_obj_ref ref, L4_fpage::Rights rights, Syscall_frame *f,
 
   switch (iutcb->values[0])
     {
-    case Info:       return Msg_sched_info::call(this, tag, iutcb, outcb);
-    case Run_thread: return sys_run(rights, f, iutcb);
-    case Idle_time:  return Msg_sched_idle::call(this, tag, iutcb, outcb);
-    case Run_thread3: return sys_run3(rights, f, iutcb);
-    default:         return commit_result(-L4_err::ENosys);
+    case Info:
+      return Msg_sched_info::call(this, tag, iutcb, outcb);
+    case Run_thread:
+      return sys_run(rights, f, iutcb);
+    case Idle_time:
+      return Msg_sched_idle::call(this, tag, iutcb, outcb);
+    case Set_prio:
+      return sys_set_prio(f, iutcb);
+    case Attach_sc:
+      return sys_attach_sc(f, iutcb);
+    case Detach_sc:
+      return sys_detach_sc(f, iutcb);
+    default:
+      return commit_result(-L4_err::ENosys);
     }
 }
