@@ -161,6 +161,35 @@ int
 Sched_proxy::idle_time(l4_sched_cpu_set_t const &, l4_kernel_clock_t &)
 { return -L4_ENOSYS; }
 
+int
+Sched_proxy::set_prio(L4::Cap<L4::Thread> thread, unsigned prio)
+{
+  (void)thread;
+  (void)prio;
+  return -L4_ENOSYS;
+  //prio = std::min(prio + _prio_offset, _prio_limit);
+  //return l4_error(L4Re::Env::env()->scheduler()->set_prio(thread, prio));
+}
+
+int
+Sched_proxy::attach_sc(L4::Cap<L4::Thread> thread,
+                       L4::Cap<L4::Sched_constraint> sc)
+{
+  (void)thread;
+  (void)sc;
+  return -L4_ENOSYS;
+  //return l4_error(L4Re::Env::env()->scheduler()->attach_sc(thread, sc));
+}
+
+int
+Sched_proxy::detach_sc(L4::Cap<L4::Thread> thread,
+                       L4::Cap<L4::Sched_constraint> sc)
+{
+  (void)thread;
+  (void)sc;
+  return -L4_ENOSYS;
+  //return l4_error(L4Re::Env::env()->scheduler()->detach_sc(thread, sc));
+}
 
 L4::Cap<L4::Thread>
 Sched_proxy::received_thread(L4::Ipc::Snd_fpage const &fp)
@@ -169,6 +198,15 @@ Sched_proxy::received_thread(L4::Ipc::Snd_fpage const &fp)
     return L4::Cap<L4::Thread>::Invalid;
 
   return L4::Cap<L4::Thread>(Rcv_cap << L4_CAP_SHIFT);
+}
+
+L4::Cap<L4::Sched_constraint>
+Sched_proxy::received_sc(L4::Ipc::Snd_fpage const &fp)
+{
+  if (!fp.cap_received())
+    return L4::Cap<L4::Sched_constraint>::Invalid;
+
+  return L4::Cap<L4::Sched_constraint>((Rcv_cap + 1) << L4_CAP_SHIFT);
 }
 
 void

@@ -43,12 +43,19 @@ public:
 
   int idle_time(l4_sched_cpu_set_t const &cpus, l4_kernel_clock_t &us);
 
+  int set_prio(L4::Cap<L4::Thread> thread, unsigned prio);
+
+  int attach_sc(L4::Cap<L4::Thread> thread, L4::Cap<L4::Sched_constraint> sc);
+
+  int detach_sc(L4::Cap<L4::Thread> thread, L4::Cap<L4::Sched_constraint> sc);
+
   void set_prio(unsigned offs, unsigned limit)
   { _prio_offset = offs; _prio_limit = limit; }
 
   L4::Cap<L4::Thread> received_thread(L4::Ipc::Snd_fpage const &fp);
-  L4::Cap<void> rcv_cap() const
-  { return L4::Cap<L4::Thread>(Rcv_cap << L4_CAP_SHIFT); }
+  L4::Cap<L4::Sched_constraint> received_sc(L4::Ipc::Snd_fpage const &fp);
+  //L4::Cap<void> rcv_cap() const
+  //{ return L4::Cap<L4::Thread>(Rcv_cap << L4_CAP_SHIFT); }
 
   void restrict_cpus(l4_umword_t cpus);
   void rescan_cpus_and_classes();

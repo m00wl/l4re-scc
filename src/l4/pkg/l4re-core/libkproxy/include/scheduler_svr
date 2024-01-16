@@ -41,6 +41,14 @@ public:
   virtual int idle_time(l4_sched_cpu_set_t const &cpus,
                         l4_kernel_clock_t &us) = 0;
 
+  virtual int set_prio(L4::Cap<L4::Thread> thread, unsigned prio) = 0;
+
+  virtual int attach_sc(L4::Cap<L4::Thread> thread,
+                        L4::Cap<L4::Sched_constraint> sc) = 0;
+
+  virtual int detach_sc(L4::Cap<L4::Thread> thread,
+                        L4::Cap<L4::Sched_constraint> sc) = 0;
+
   virtual ~Scheduler_interface() {}
 };
 
@@ -82,6 +90,43 @@ public:
     return this_svr()->run_thread(t, sp);
   }
 
+  long op_set_prio(L4::Scheduler::Rights, L4::Ipc::Snd_fpage thread,
+                   l4_uint8_t prio)
+  {
+    L4::Cap<L4::Thread> t = this_svr()->received_thread(thread);
+    if (!t.is_valid())
+      return -L4_EINVAL;
+
+    return this_svr()->set_prio(t, prio);
+  }
+
+  long op_attach_sc(L4::Scheduler::Rights, L4::Ipc::Snd_fpage thread,
+                    L4::Ipc::Snd_fpage sc)
+  {
+    L4::Cap<L4::Thread> t = this_svr()->received_thread(thread);
+    if (!t.is_valid())
+      return -L4_EINVAL;
+
+    L4::Cap<L4::Sched_constraint> s = this_svr()->received_sc(sc);
+    if (!t.is_valid())
+      return -L4_EINVAL;
+
+    return this_svr()->attach_sc(t, s);
+  }
+
+  long op_detach_sc(L4::Scheduler::Rights, L4::Ipc::Snd_fpage thread, L4::Ipc::Snd_fpage sc)
+  {
+    L4::Cap<L4::Thread> t = this_svr()->received_thread(thread);
+    if (!t.is_valid())
+      return -L4_EINVAL;
+
+    L4::Cap<L4::Sched_constraint> s = this_svr()->received_sc(sc);
+    if (!t.is_valid())
+      return -L4_EINVAL;
+
+    return this_svr()->detach_sc(t, s);
+  }
+
 protected:
   SVR const *this_svr() const { return static_cast<SVR const *>(this); }
   SVR *this_svr() { return static_cast<SVR *>(this); }
@@ -103,6 +148,7 @@ public:
 
   Scheduler_svr(Scheduler_interface *s) : Icu(1, &_scheduler_irq), _sched(s) {}
   virtual L4::Cap<L4::Thread> received_thread(L4::Ipc::Snd_fpage const &fp) = 0;
+  virtual L4::Cap<L4::Sched_constraint> received_sc(L4::Ipc::Snd_fpage const &fp) = 0;
   virtual L4::Ipc_svr::Server_iface *server_iface() const = 0;
   virtual ~Scheduler_svr() = 0;
 
@@ -118,6 +164,15 @@ public:
 
   int idle_time(l4_sched_cpu_set_t const &cpus, l4_kernel_clock_t &us)
   { return _sched->idle_time(cpus, us); }
+
+  int set_prio(L4::Cap<L4::Thread> thread, l4_uint8_t prio)
+  { return _sched->set_prio(thread, prio); }
+
+  int attach_sc(L4::Cap<L4::Thread> thread, L4::Cap<L4::Sched_constraint> sc)
+  { return _sched->attach_sc(thread, sc); }
+
+  int detach_sc(L4::Cap<L4::Thread> thread, L4::Cap<L4::Sched_constraint> sc)
+  { return _sched->detach_sc(thread, sc); }
 
   Icu::Irq *scheduler_irq() { return &_scheduler_irq; }
   Icu::Irq const *scheduler_irq() const { return &_scheduler_irq; }

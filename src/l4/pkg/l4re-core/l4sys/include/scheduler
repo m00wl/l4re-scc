@@ -30,6 +30,8 @@
 
 namespace L4 {
 
+class Sched_constraint;
+
 /**
  * C++ interface of the Scheduler kernel object, see \ref l4_scheduler_api for
  * the C interface.
@@ -56,7 +58,7 @@ namespace L4 {
  */
 class L4_EXPORT Scheduler :
   public Kobject_t<Scheduler, Icu, L4_PROTO_SCHEDULER,
-                   Type_info::Demand_t<1> >
+                   Type_info::Demand_t<2> >
 {
 public:
   // ABI function for 'info' call
@@ -151,6 +153,17 @@ public:
       l4_msgtag_t, idle_time, (l4_sched_cpu_set_t const &cpus,
                                l4_kernel_clock_t *us));
 
+  L4_INLINE_RPC_OP(L4_SCHEDULER_SET_PRIO_OP,
+      l4_msgtag_t, set_prio, (Ipc::Cap<Thread> thread, unsigned));
+
+  L4_INLINE_RPC_OP(L4_SCHEDULER_ATTACH_SC_OP,
+      l4_msgtag_t, attach_sc, (Ipc::Cap<Thread> thread,
+                               Ipc::Cap<Sched_constraint> sc));
+
+  L4_INLINE_RPC_OP(L4_SCHEDULER_DETACH_SC_OP,
+      l4_msgtag_t, detach_sc, (Ipc::Cap<Thread> thread,
+                               Ipc::Cap<Sched_constraint> sc));
+
   /**
    * Query if a CPU is online.
    *
@@ -163,6 +176,7 @@ public:
   bool is_online(l4_umword_t cpu, l4_utcb_t *utcb = l4_utcb()) const noexcept
   { return l4_scheduler_is_online_u(cap(), cpu, utcb); }
 
-  typedef L4::Typeid::Rpcs_sys<info_t, run_thread_t, idle_time_t> Rpcs;
+  typedef L4::Typeid::Rpcs_sys<info_t, run_thread_t, idle_time_t, set_prio_t,
+            attach_sc_t, detach_sc_t> Rpcs;
 };
 }
