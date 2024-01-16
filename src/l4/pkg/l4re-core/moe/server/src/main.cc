@@ -520,8 +520,10 @@ int main(int argc, char**argv)
 
   info.printf("Hello world\n");
 
+  //l4_msgtag_t res = L4Re::Env::env()->scheduler()
+  //  ->run_thread(L4::Cap<L4::Thread>(L4_BASE_THREAD_CAP), l4_sched_param(0xff));
   l4_msgtag_t res = L4Re::Env::env()->scheduler()
-    ->run_thread(L4::Cap<L4::Thread>(L4_BASE_THREAD_CAP), l4_sched_param(0xff));
+    ->set_prio(L4::Cap<L4::Thread>(L4_BASE_THREAD_CAP), L4_SCHED_MAX_PRIO);
   if (l4_error(res) < 0)
     warn.printf("could not set scheduling priority\n");
 
