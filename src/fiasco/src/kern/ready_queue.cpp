@@ -32,6 +32,7 @@ public:
   void ready_enqueue(Context *c)
   {
     assert(cpu_lock.test());
+    assert(c->get_sched_context());
 
     // Don't enqueue threads which are already enqueued
     if (EXPECT_FALSE (c->in_ready_queue()))

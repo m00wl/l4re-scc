@@ -656,6 +656,7 @@ Thread_object::sys_ex_regs(L4_msg_tag const &tag, Utcb *utcb, Utcb *out)
 
   if (!get_sched_context())
   {
+    panic("no sched_context (thread_object)");
     if (M_SCHEDULER_DEBUG)
     {
       printf("SCHEDULER> trying to sys_ex_regs remote thread %p which has no sched_context attached.\n", this);

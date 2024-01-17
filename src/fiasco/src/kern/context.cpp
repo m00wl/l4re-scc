@@ -324,7 +324,7 @@ private:
   // The scheduling parameters.
   friend class Ready_queue;
   Unsigned8 _prio;
-  Sched_constraint *_sched_context;
+  Sched_constraint *_sched_context = nullptr;
 
   union Sched_param
   {
@@ -941,6 +941,7 @@ PRIVATE
 bool
 Context::sched_context_is_ok()
 {
+  assert(_sched_context);
   // TOMO: should probably lock this.
   Sched_constraint *sc { _sched_context };
 
@@ -1040,7 +1041,7 @@ Context::sched_context_contains(Sched_constraint *sc)
   return false;
 }
 
-PROTECTED
+PUBLIC
 void
 Context::print_sched_context()
 {
@@ -1145,54 +1146,60 @@ Context::check_sched_param(L4_sched_param const *_p)
   return 0;
 }
 
-PUBLIC
-void
-Context::set_sched_param(L4_sched_param const *_p)
-{
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> Context[%p]: set_sched_param\n", this);
-  Sched_param const *p = reinterpret_cast<Sched_param const *>(_p);
-  // TOMO: assumption about SC here!
-  Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
-  if (_p->is_legacy())
-  {
-    // legacy fixed prio
-    _prio = p->legacy_fixed_prio.prio;
-    if (p->legacy_fixed_prio.prio > 255)
-      _prio = 255;
-
-    // TOMO: assumption about SC here!
-    //get_quant_sc()->set_quantum(p->legacy_fixed_prio.quantum);
-    //get_budget_sc()->set_budget(p->legacy_fixed_prio.quantum);
-    b->set_budget(p->legacy_fixed_prio.quantum);
-    if (p->legacy_fixed_prio.quantum == 0)
-      //get_quant_sc()->set_quantum(Config::Default_time_slice);
-      //get_budget_sc()->set_budget(Config::Default_time_slice);
-      b->set_budget(Config::Default_time_slice);
-    return;
-  }
-
-  switch (p->p.sched_class)
-  {
-    case L4_sched_param_fixed_prio::Class:
-      _prio = p->fixed_prio.prio;
-      if (p->fixed_prio.prio > 255)
-        _prio = 255;
-
-      // TOMO: assumption about SC here!
-      //get_quant_sc()->set_quantum(p->fixed_prio.quantum);
-      //get_budget_sc()->set_budget(p->fixed_prio.quantum);
-      b->set_budget(p->fixed_prio.quantum);
-      if (p->fixed_prio.quantum == 0)
-        //get_quant_sc()->set_quantum(Config::Default_time_slice);
-        //get_budget_sc()->set_budget(Config::Default_time_slice);
-        b->set_budget(Config::Default_time_slice);
-      break;
-
-    default:
-      assert(false && "Missing check_param()?");
-      break;
-  }
-}
+//PUBLIC
+//void
+//Context::set_sched_param(L4_sched_param const *_p)
+//{
+//  printf("old prio: %d\n", _prio);
+//  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> Context[%p]: set_sched_param\n", this);
+//  Sched_param const *p = reinterpret_cast<Sched_param const *>(_p);
+//  // TOMO: assumption about SC here!
+//  Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
+//  printf("old budget: %llu\n", b->get_budget());
+//  if (_p->is_legacy())
+//  {
+//    // legacy fixed prio
+//    _prio = p->legacy_fixed_prio.prio;
+//    if (p->legacy_fixed_prio.prio > 255)
+//      _prio = 255;
+//    printf("prio: %d\n", _prio);
+//
+//    // TOMO: assumption about SC here!
+//    //get_quant_sc()->set_quantum(p->legacy_fixed_prio.quantum);
+//    //get_budget_sc()->set_budget(p->legacy_fixed_prio.quantum);
+//    b->set_budget(p->legacy_fixed_prio.quantum);
+//    if (p->legacy_fixed_prio.quantum == 0)
+//      //get_quant_sc()->set_quantum(Config::Default_time_slice);
+//      //get_budget_sc()->set_budget(Config::Default_time_slice);
+//      b->set_budget(Config::Default_time_slice);
+//    printf("budget: %llu\n", b->get_budget());
+//    return;
+//  }
+//
+//  switch (p->p.sched_class)
+//  {
+//    case L4_sched_param_fixed_prio::Class:
+//      _prio = p->fixed_prio.prio;
+//      if (p->fixed_prio.prio > 255)
+//        _prio = 255;
+//      printf("prio: %d\n", _prio);
+//
+//      // TOMO: assumption about SC here!
+//      //get_quant_sc()->set_quantum(p->fixed_prio.quantum);
+//      //get_budget_sc()->set_budget(p->fixed_prio.quantum);
+//      b->set_budget(p->fixed_prio.quantum);
+//      if (p->fixed_prio.quantum == 0)
+//        //get_quant_sc()->set_quantum(Config::Default_time_slice);
+//        //get_budget_sc()->set_budget(Config::Default_time_slice);
+//        b->set_budget(Config::Default_time_slice);
+//      printf("budget: %llu\n", b->get_budget());
+//      break;
+//
+//    default:
+//      assert(false && "Missing check_param()?");
+//      break;
+//  }
+//}
 
 
 // queue operations
@@ -1210,10 +1217,12 @@ Context::update_ready_list()
   //panic("c: update_ready_list not available\n");
   assert (this == current());
 
-  // TOMO: assumption about SC here!
-  Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
-  if ((state() & Thread_ready_mask) && b->get_left())
-    //Sched_context::rq.current().ready_enqueue(sched());
+  //// TOMO: assumption about SC here!
+  //Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
+  //if ((state() & Thread_ready_mask) && b->get_left())
+  //  //Sched_context::rq.current().ready_enqueue(sched());
+  //  Ready_queue::rq.current().ready_enqueue(this);
+  if (state() & Thread_ready_mask)
     Ready_queue::rq.current().ready_enqueue(this);
 }
 
@@ -1243,7 +1252,6 @@ Context::activate()
 {
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> C[%p]: activated\n", this);
   auto guard = lock_guard(cpu_lock);
-  migrate_sched_context_to(current_cpu());
   //// TOMO: assumption about SC here!
   //Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
   //b->calc_and_schedule_next_repl();

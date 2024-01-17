@@ -109,9 +109,11 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
            cxx::int_value<Cpu_number>(sched_param->cpus.offset()),
            cxx::int_value<Order>(sched_param->cpus.granularity()));
 
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> run_thread() was called!\n");
+  printf("\033[1;33mSCHEDULER> run_thread (Warning: Prio/Timeslice in L4_sched_param ignored, use SC API instead)\033[0m\n");
   if (!thread->get_sched_context())
   {
+    printf("thread: %p\n", thread);
+    panic("no sched_context (scheduler)");
     if (M_SCHEDULER_DEBUG)
     {
       printf("SCHEDULER> trying to run thread %p which has no sched_context attached.\n", thread);
@@ -169,7 +171,8 @@ Scheduler::sys_attach_sc(Syscall_frame *f, Utcb const *utcb)
   if (!sc)
     return tag;
 
-  printf("ready to attach sc now!\n");
+  thread->attach_sc(sc);
+  thread->print_sched_context();
 
   return commit_result(0);
 

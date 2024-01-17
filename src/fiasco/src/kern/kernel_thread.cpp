@@ -86,6 +86,7 @@ Kernel_thread::bootstrap()
   Timer::init_system_clock();
   //Sched_context::rq.current().set_idle(this->sched());
   alloc_sched_context();
+  print_sched_context();
   migrate_sched_context_to(current_cpu());
   activate_sched_context();
   //// TOMO: assumption about SC here!

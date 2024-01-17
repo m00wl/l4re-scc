@@ -68,6 +68,8 @@ Kernel_thread::init_workload()
   check (sigma0_thread->ex_regs(Kip::k()->sigma0_ip, 0));
 
   sigma0_thread->alloc_sched_context();
+  sigma0_thread->print_sched_context();
+  sigma0_thread->migrate_sched_context_to(current_cpu());
   // TOMO: we should map the sched_constraints to the initial objects.
   // problem is, we don't know how they get exposed to userspace.
   // therefore, we don't do it just yet.
@@ -103,6 +105,8 @@ Kernel_thread::init_workload()
   check (boot_thread->ex_regs(Kip::k()->root_ip, 0));
 
   boot_thread->alloc_sched_context();
+  boot_thread->print_sched_context();
+  boot_thread->migrate_sched_context_to(current_cpu());
   // TOMO: map sched_constraints here.
   //check(map(boot_thread->get_sched_context(), boot_task, boot_task, C_sched_context, 0));
 

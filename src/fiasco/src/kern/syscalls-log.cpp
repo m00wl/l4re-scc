@@ -48,9 +48,10 @@ IMPLEMENT void FIASCO_FLATTEN sys_ipc_log_wrapper()
       Tb_entry_ipc *tb = EXPECT_TRUE(Jdb_ipc_trace::log_buf())
                        ? Jdb_tbuf::new_entry<Tb_entry_ipc>()
                        : &_local;
-      // TOMO: assumption about SC here!
-      tb->set(curr, regs->ip(), ipc_regs, utcb,
-	      dbg_id, static_cast<Budget_sc *>(curr->get_sched_context())->get_left());
+      //// TOMO: assumption about SC here!
+      //tb->set(curr, regs->ip(), ipc_regs, utcb,
+	    //  dbg_id, static_cast<Budget_sc *>(curr->get_sched_context())->get_left());
+      tb->set(curr, regs->ip(), ipc_regs, utcb, dbg_id, 0);
 
       if (EXPECT_TRUE(Jdb_ipc_trace::log_buf()))
 	Jdb_tbuf::commit_entry(tb);

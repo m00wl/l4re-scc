@@ -449,6 +449,7 @@ PUBLIC
 void
 Budget_sc::migrate_away() override
 {
+  if (M_MIGRATION_DEBUG) printf("MIGRATION> BSC[%p]: migrate away\n", this);
   //deactivate();
   _repl_timeout.reset();
 
@@ -460,6 +461,7 @@ PUBLIC
 void
 Budget_sc::migrate_to(Cpu_number target) override
 {
+  if (M_MIGRATION_DEBUG) printf("MIGRATION> BSC[%p]: migrate to cpu %d\n", this, cxx::int_value<Cpu_number>(target));
   assert(!_oob_timeout.is_set());
   assert(!_repl_timeout.is_set());
 
