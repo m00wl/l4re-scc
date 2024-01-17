@@ -14,6 +14,7 @@
 #include <l4/sys/task>
 #include <l4/sys/thread>
 #include <l4/sys/scheduler>
+#include <l4/sys/sched_constraint>
 #include <l4/sys/factory>
 
 namespace Ldr {
@@ -136,11 +137,15 @@ public:
     L4::Cap<L4::Task> ntask;
     L4::Cap<L4::Thread> nthread;
     L4::Cap<L4::Factory> factory;
+    L4::Cap<L4::Budget_sc> nsc;
 
-    this->get_task_caps(&factory, &ntask, &nthread);
+    this->get_task_caps(&factory, &ntask, &nthread, &nsc);
 
     chksys(factory->create_task(ntask, env->utcb_area()));
     chksys(factory->create(nthread));
+    chksys(factory->create(nsc) << l4_mword_t(L4::Sched_constraint::Type::Budget_sc));
+
+    chksys(env->scheduler()->attach_sc(nthread, nsc));
 
     chksys(ntask->map(L4Re::This_task, ntask.fpage(),
 	  Cap<L4::Task>(L4Re::This_task).snd_base()));
@@ -169,6 +174,7 @@ public:
     th_attr.bind((l4_utcb_t*)this->_info.utcbs_start, ntask);
     chksys(nthread->control(th_attr));
 
+    chksys(env->scheduler()->set_prio(nthread, Prios::Default_thread_prio));
     chksys(this->run_thread(nthread,
                             l4_sched_param(Prios::Default_thread_prio)));
 

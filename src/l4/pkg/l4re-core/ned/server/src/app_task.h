@@ -12,6 +12,7 @@
 #include <l4/re/env>
 #include <l4/re/rm>
 #include <l4/sys/scheduler>
+#include <l4/sys/sched_constraint>
 #include <l4/re/util/object_registry>
 #include <l4/re/util/cap_alloc>
 
@@ -41,6 +42,7 @@ private:
 
   Unique_del_cap<L4::Task> _task;
   Unique_del_cap<L4::Thread> _thread;
+  Unique_del_cap<L4::Budget_sc> _sc;
   Unique_del_cap<L4Re::Rm> _rm;
 
   State _state;
@@ -68,6 +70,7 @@ public:
   L4::Cap<L4Re::Rm> rm() { return _rm.get(); }
   L4::Cap<L4::Task> task_cap() const { return _task.get(); }
   L4::Cap<L4::Thread> thread_cap() const { return _thread.get(); }
+  L4::Cap<L4::Budget_sc> sc_cap() const { return _sc.get(); }
 
   virtual void terminate();
 

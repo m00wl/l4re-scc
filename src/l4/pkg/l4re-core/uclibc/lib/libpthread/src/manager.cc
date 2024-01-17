@@ -40,6 +40,7 @@
 #include <l4/sys/debugger.h>
 #include <l4/sys/factory>
 #include <l4/sys/scheduler>
+#include <l4/sys/sched_constraint>
 #include <l4/sys/thread>
 
 extern "C" {
@@ -535,6 +536,7 @@ int __pthread_mgr_create_thread(pthread_descr thread, char **tos,
   using namespace L4Re;
   Env const *e = Env::env();
   auto _t = L4Re::Util::make_unique_cap<L4::Thread>();
+  auto _s = L4Re::Util::make_unique_cap<L4::Budget_sc>();
   if (!_t.is_valid())
     return -ENOMEM;
 
@@ -548,6 +550,16 @@ int __pthread_mgr_create_thread(pthread_descr thread, char **tos,
 
   // needed by __alloc_thread_sem
   thread->p_th_cap = _t.cap();
+
+  err = l4_error(e->factory()->create(_s.get()) << l4_mword_t(L4::Sched_constraint::Type::Budget_sc));
+  if (err < 0)
+    return err;
+
+  thread->p_th_sc_cap = _s.cap();
+
+  err = l4_error(e->scheduler()->attach_sc(_t.get(), _s.get()));
+  if (err < 0)
+    return err;
 
   err = __alloc_thread_sem(thread, th_sem.get());
   if (err < 0)
@@ -601,6 +613,7 @@ int __pthread_mgr_create_thread(pthread_descr thread, char **tos,
 
   // release the automatic capabilities
   _t.release();
+  _s.release();
   th_sem.release();
   return 0;
 }
@@ -1158,7 +1171,8 @@ void __pthread_manager_adjust_prio(int thread_prio)
   if (thread_prio <= manager_thread->p_priority)
     return;
 
-  l4_sched_param_t sp = l4_sched_param(thread_prio, 0);
-  L4Re::Env::env()->scheduler()->run_thread(L4::Cap<L4::Thread>(manager_thread->p_th_cap), sp);
+  //l4_sched_param_t sp = l4_sched_param(thread_prio, 0);
+  //L4Re::Env::env()->scheduler()->run_thread(L4::Cap<L4::Thread>(manager_thread->p_th_cap), sp);
+  L4Re::Env::env()->scheduler()->set_prio(L4::Cap<L4::Thread>(manager_thread->p_th_cap), thread_prio);
   manager_thread->p_priority = thread_prio;
 }

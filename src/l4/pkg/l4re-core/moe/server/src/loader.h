@@ -78,7 +78,8 @@ struct Moe_app_model : public Ldr::Base_app_model<Moe::Stack>
 
   void get_task_caps(L4::Cap<L4::Factory> *factory,
                      L4::Cap<L4::Task> *task,
-                     L4::Cap<L4::Thread> *thread);
+                     L4::Cap<L4::Thread> *thread,
+                     L4::Cap<L4::Budget_sc> *sc);
 
   l4_msgtag_t run_thread(L4::Cap<L4::Thread> thread,
                          l4_sched_param_t const &sp)

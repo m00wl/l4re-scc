@@ -20,6 +20,7 @@
 #include <l4/sys/types.h>
 #include <l4/sys/factory>
 #include <l4/sys/scheduler>
+#include <l4/sys/sched_constraint>
 #include <l4/sys/thread>
 
 #include <l4/re/rm>
@@ -42,6 +43,7 @@ using L4Re::Dataspace;
 using L4Re::Rm;
 using L4::Cap;
 using L4::Thread;
+using L4::Budget_sc;
 using L4Re::Env;
 using L4Re::chksys;
 
@@ -61,6 +63,7 @@ static void *__loader_stack_p;
 static Entry_data __loader_entry;
 static Region_map *__rm;
 static Cap<Thread> app_thread;
+static Cap<Budget_sc> app_sc;
 
 static
 void unmap_stack_and_start()
@@ -301,6 +304,8 @@ bool Loader::start(Cap<Dataspace> bin, Region_map *rm, l4re_aux_t *aux)
 
   app_thread = Cap<Thread>(env->first_free_cap() << L4_CAP_SHIFT);
   env->first_free_cap((app_thread.cap() >> L4_CAP_SHIFT)+1);
+  app_sc = Cap<Budget_sc>(env->first_free_cap() << L4_CAP_SHIFT);
+  env->first_free_cap((app_sc.cap() >> L4_CAP_SHIFT)+1);
 #ifdef L4RE_USE_LOCAL_PAGER_GATE
   __loader_entry.pager = Global::cap_alloc.alloc<Rm>();
   chksys(env->factory()->create_gate(__loader_entry.pager, env->main_thread(), 0));
@@ -309,6 +314,8 @@ bool Loader::start(Cap<Dataspace> bin, Region_map *rm, l4re_aux_t *aux)
 #endif
 
   chksys(env->factory()->create(app_thread), "create app thread");
+
+  chksys(env->factory()->create(app_sc) << l4_mword_t(L4::Sched_constraint::Type::Budget_sc), "create app budget sc");
 
   l4_debugger_set_object_name(app_thread.cap(),
                               strrchr(aux->binary, '/')
@@ -322,6 +329,8 @@ bool Loader::start(Cap<Dataspace> bin, Region_map *rm, l4re_aux_t *aux)
   env->first_free_utcb(env->first_free_utcb() + L4_UTCB_OFFSET);
 
   chksys(app_thread->control(attr), "setup app thread");
+  chksys(env->scheduler()->set_prio(app_thread, L4RE_MAIN_THREAD_PRIO));
+  chksys(env->scheduler()->attach_sc(app_thread, app_sc));
   chksys(env->scheduler()->run_thread(app_thread, l4_sched_param(L4RE_MAIN_THREAD_PRIO)));
   chksys(app_thread->ex_regs((unsigned long)&loader_thread,
                              l4_align_stack_for_direct_fncall((unsigned long)__loader_stack_p), 0),

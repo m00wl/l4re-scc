@@ -16,6 +16,7 @@
 
 #include <l4/sys/cxx/ipc_epiface>
 #include <l4/sys/capability>
+#include <l4/sys/sched_constraint>
 #include <l4/re/parent>
 
 #include <cstring>
@@ -26,6 +27,7 @@ class App_task : public L4::Epiface_t<App_task, L4Re::Parent, Moe::Server_object
 private:
   L4::Cap<L4::Task> _task;
   L4::Cap<L4::Thread> _thread;
+  L4::Cap<L4::Budget_sc> _sc;
 
 
   Allocator *_alloc;
@@ -40,9 +42,11 @@ public:
 
   void task_cap(L4::Cap<L4::Task> const &c) { _task = c; }
   void thread_cap(L4::Cap<L4::Thread> const &c) { _thread = c; }
+  void sc_cap(L4::Cap<L4::Budget_sc> const &c) { _sc = c; }
 
   L4::Cap<L4::Task> task_cap() const { return _task; }
   L4::Cap<L4::Thread> thread_cap() const { return _thread; }
+  L4::Cap<L4::Budget_sc> sc_cap() const { return _sc; }
 
   virtual ~App_task();
 };

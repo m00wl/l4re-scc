@@ -73,6 +73,7 @@ App_task::App_task(Ned::Registry *r,
 : _ref_cnt(0), _r(r),
   _task(chkcap(cap_alloc.alloc<L4::Task>(), "allocating task cap")),
   _thread(chkcap(cap_alloc.alloc<L4::Thread>(), "allocating thread cap")),
+  _sc(chkcap(cap_alloc.alloc<L4::Budget_sc>(), "allocating budget_sc cap")),
   _rm(chkcap(cap_alloc.alloc<L4Re::Rm>(), "allocating region-map cap")),
   _state(Initializing), _observer(0)
 {
@@ -86,6 +87,7 @@ App_task::terminate()
 {
   _task.reset();
   _thread.reset();
+  _sc.reset();
   _rm.reset();
 
   _r->unregister_obj(this);

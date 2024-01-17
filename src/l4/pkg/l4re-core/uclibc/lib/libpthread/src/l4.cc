@@ -126,8 +126,9 @@ int __pthread_setschedparam(pthread_t thread, int policy,
 
     {
       L4::Cap<L4::Thread> t(th->p_th_cap);
-      l4_sched_param_t sp = l4_sched_param(prio, 0);
-      L4Re::Env::env()->scheduler()->run_thread(t, sp);
+      //l4_sched_param_t sp = l4_sched_param(prio, 0);
+      //L4Re::Env::env()->scheduler()->run_thread(t, sp);
+      L4Re::Env::env()->scheduler()->set_prio(t, prio);
     }
   __pthread_unlock(handle_to_lock(handle));
 

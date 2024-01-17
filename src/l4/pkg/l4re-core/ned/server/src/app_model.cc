@@ -160,13 +160,15 @@ App_model::init_prog()
 void
 App_model::get_task_caps(L4::Cap<L4::Factory> *factory,
                              L4::Cap<L4::Task> *task,
-                             L4::Cap<L4::Thread> *thread)
+                             L4::Cap<L4::Thread> *thread,
+                             L4::Cap<L4::Budget_sc> *sc)
 {
   prog_info()->rm = _task->rm().fpage();
   prog_info()->parent = _task->obj_cap().fpage();
   Dbg(Dbg::Info).printf("parent cap is %lx\n", prog_info()->parent.raw);
   *task = _task->task_cap();
   *thread = _task->thread_cap();
+  *sc = _task->sc_cap();
   *factory = L4::Cap<L4::Factory>(prog_info()->factory.raw & L4_FPAGE_ADDR_MASK);
 }
 

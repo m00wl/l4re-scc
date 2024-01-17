@@ -184,8 +184,9 @@ static int run(int argc, char const *argv[], char const *envp[])
   loader.start(file, Global::local_rm, Global::l4re_aux);
 
   // Raise RM prio to its MCP
-  env->scheduler()->run_thread(env->main_thread(),
-                               l4_sched_param(L4_SCHED_MAX_PRIO));
+  //env->scheduler()->run_thread(env->main_thread(),
+  //                             l4_sched_param(L4_SCHED_MAX_PRIO));
+  env->scheduler()->set_prio(env->main_thread(), L4_SCHED_MAX_PRIO);
 
   boot.printf("Start server loop\n");
   server.loop<L4::Runtime_error>(Dispatcher());

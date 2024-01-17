@@ -133,6 +133,7 @@ struct pthread
 
   l4_cap_idx_t     p_thsem_cap;
   l4_cap_idx_t     p_th_cap;
+  l4_cap_idx_t     p_th_sc_cap; /* sched_constraint that holds CPU time allocation for the pthread */
   struct _pthread_fastlock * p_lock; /* Spinlock for synchronized accesses */
   sigjmp_buf * p_cancel_jmp;    /* where to siglongjmp on a cancel or NULL */
   char p_terminated;            /* true if terminated e.g. by pthread_exit */
