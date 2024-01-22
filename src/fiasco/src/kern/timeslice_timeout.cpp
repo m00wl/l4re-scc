@@ -11,9 +11,7 @@ IMPLEMENTATION:
 
 #include <cassert>
 #include "globals.h"
-#include "sched_context.h"
 #include "std_macros.h"
-#include "sc_scheduler.h"
 #include "ready_queue.h"
 
 /* Initialize global valiable timeslice_timeout */
@@ -25,7 +23,6 @@ Timeslice_timeout::Timeslice_timeout(Cpu_number cpu)
 {
   timeslice_timeout.cpu(cpu) = this;
 }
-
 
 /**
  * Timeout expiration callback function
@@ -55,3 +52,4 @@ Timeslice_timeout::expired() override
 
   return true;
 }
+

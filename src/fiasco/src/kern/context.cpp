@@ -324,7 +324,9 @@ private:
   // The scheduling parameters.
   friend class Ready_queue;
   Unsigned8 _prio;
-  Sched_constraint *_sched_context = nullptr;
+  Sched_constraint *_sched_context;
+  Sched_constraint *_blocked_on;
+  Context *_next_blocked;
 
   union Sched_param
   {
@@ -450,7 +452,7 @@ IMPLEMENTATION:
 #include "thread_state.h"
 #include "timer.h"
 #include "timeout.h"
-#include "sched_context.h"
+#include "sched_constraint.h"
 #include "ready_queue.h"
 
 DEFINE_PER_CPU Per_cpu<Clock> Context::_clock(Per_cpu_data::Cpu_num);
@@ -486,7 +488,9 @@ Context::Context()
   _helper(this),
   //_sched_context(this),
   _prio(Config::Default_prio),
-  _sched_context(nullptr)
+  _sched_context(nullptr),
+  _blocked_on(nullptr),
+  _next_blocked(nullptr)
 {
   _home_cpu = Cpu::invalid();
 }
@@ -907,6 +911,26 @@ Context::change_prio_to(Unsigned8 p)
 
 PUBLIC
 Sched_constraint *
+Context::get_blocked_on() const
+{ return _blocked_on; }
+
+PUBLIC
+void
+Context::set_blocked_on(Sched_constraint *sc)
+{ _blocked_on = sc; }
+
+PUBLIC
+Context *
+Context::get_next_blocked() const
+{ return _next_blocked; }
+
+PUBLIC
+void
+Context::set_next_blocked(Context *c)
+{ _next_blocked = c; }
+
+PUBLIC
+Sched_constraint *
 Context::get_sched_context() const
 { return _sched_context; }
 
@@ -915,6 +939,7 @@ Context::get_sched_context() const
 //Context::set_sched_context(Sched_constraint *sc)
 //{ _sched_context = sc; }
 
+// TOMO: accounting should ideally happen before the next sched_context is selected.
 PUBLIC
 void
 Context::switch_sched_context(Context *to)

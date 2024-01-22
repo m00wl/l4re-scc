@@ -37,7 +37,6 @@ IMPLEMENTATION:
 #include "cpu_lock.h"
 #include "lock_guard.h"
 #include "mem.h"
-#include "sc_scheduler.h"
 #include "ready_queue.h"
 
 //

@@ -22,8 +22,6 @@ IMPLEMENTATION [arm]:
 #include "reset.h"
 #include "space.h"
 #include "terminate.h"
-#include "sched_context.h"
-#include "sc_scheduler.h"
 
 #include "processor.h"
 

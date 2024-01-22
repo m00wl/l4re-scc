@@ -3,6 +3,7 @@ INTERFACE:
 #include "kobject.h"
 #include "kobject_helper.h"
 #include "thread.h"
+#include "sched_constraint.h"
 
 class Thread_object : public Thread, public Kobject_helper_base
 {

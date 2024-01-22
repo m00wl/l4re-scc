@@ -186,13 +186,12 @@ IMPLEMENTATION:
 #include "logdefs.h"
 #include "map_util.h"
 #include "ram_quota.h"
-#include "sched_context.h"
 #include "space.h"
 #include "std_macros.h"
 #include "task.h"
 #include "thread_state.h"
 #include "timeout.h"
-#include "sc_scheduler.h"
+#include "sched_constraint.h"
 #include "ready_queue.h"
 
 JDB_DEFINE_TYPENAME(Thread,  "\033[32mThread\033[m");
@@ -413,7 +412,7 @@ Thread::continuation_test_and_restore()
 // state requests/manipulation
 //
 
-PUBLIC inline NEEDS ["config.h", "timeout.h", "sc_scheduler.h", "ready_queue.h"]
+PUBLIC inline NEEDS ["config.h", "timeout.h", "ready_queue.h"]
 void
 Thread::handle_timer_interrupt()
 {
@@ -597,6 +596,10 @@ Thread::do_kill()
   // to the 'invalid' CPU forcefully and then switching to the kernel
   // thread for doing the last bits.
   force_to_invalid_cpu();
+  deactivate_sched_context();
+  migrate_sched_context_away();
+  if (get_blocked_on())
+    get_blocked_on()->notify_blocked_delete(this);
   kernel_context_drq(handle_kill_helper, 0);
   kdb_ke("I'm dead");
   return true;
@@ -1373,6 +1376,8 @@ Thread::migrate_to(Cpu_number target_cpu, bool /*remote*/)
           return false;
         }
 
+      migrate_sched_context_to(target_cpu);
+
       // migrated meanwhile
       if (access_once(&_home_cpu) != target_cpu || _pending_rq.queued())
         return false;
@@ -1401,8 +1406,6 @@ Thread::migrate_to(Cpu_number target_cpu, bool /*remote*/)
       //LOG_MSG_3VAL(this, "sipi", current_cpu(), cpu(), (Mword)current());
       Ipi::send(Ipi::Request, current_cpu(), target_cpu);
     }
-
-  migrate_sched_context_to(target_cpu);
 
   return false;
 }

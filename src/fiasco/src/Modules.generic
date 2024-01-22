@@ -31,7 +31,7 @@ INTERFACES_KERNEL	:= cpu_mask rcupdate kobject_mapdb context_base pm \
                            kernel_task platform_control_object          \
 			   irq_controller irq_chip irq_mgr terminate         \
 			   continuation timer_tick platform_control          \
-			   sched_context utcb_init perf_cnt trap_state       \
+			   sched_constraint utcb_init perf_cnt trap_state       \
 			   buddy_alloc vkey kdb_ke prio_list ipi scheduler   \
 			   clock sys_call_page boot_alloc                    \
 			   assertion semaphore jdb_object tlbs

@@ -5,7 +5,6 @@
 // --------------------------------------------------------------------------
 INTERFACE [sched_fcc]:
 
-#include <cxx/slist>
 #include "member_offs.h"
 #include "types.h"
 #include "globals.h"
@@ -14,16 +13,13 @@ INTERFACE [sched_fcc]:
 
 class Context;
 
-#define SC_MAX_LIST_SIZE 1
-
 class Sched_constraint
 : public cxx::Dyn_castable<Sched_constraint, Kobject>,
   public Ref_cnt_obj
 {
 public:
   typedef Slab_cache Self_alloc;
-  // TOMO: make blocked list a cxx list (just like semaphore):
-  typedef cxx::S_list<Context> Blocked_list;
+
   // undefine default new operator.
   void *operator new(size_t);
 
@@ -43,10 +39,14 @@ public:
   { _next = sc; }
 
   Context *get_blocked() const
-  { return _blocked[0]; }
+  { return _blocked; }
 
-  void set_blocked(Context *c)
-  { _blocked[0] = c; }
+  void clear_blocked()
+  { _blocked = nullptr; }
+
+  void set_blocked(Context *c);
+
+  void notify_blocked_delete(Context *c);
 
   virtual void deactivate() = 0;
   virtual void activate() = 0;
@@ -55,15 +55,16 @@ public:
 
   enum Type
   {
+    //Timeslice_sc,
     Budget_sc,
-    Time_window_sc,
+    Timer_window_sc,
   };
 
 private:
   Ram_quota *_quota;
   Sched_constraint *_next;
   bool _run;
-  Context *_blocked[SC_MAX_LIST_SIZE];
+  Context *_blocked;
 };
 
 class Quant_sc : public Sched_constraint
@@ -196,12 +197,77 @@ PUBLIC
 Sched_constraint::~Sched_constraint()
 { printf("SC[%p]: delete\n", this); }
 
-PUBLIC static inline
-Mword
-Sched_constraint::sched_classes()
+IMPLEMENT
+void
+Sched_constraint::set_blocked(Context *c)
 {
-  return 1UL << (-L4_sched_param_fixed_prio::Class);
+  assert(c);
+  assert(!c->get_next_blocked());
+  assert(!in_blocked_list(c));
+
+  if (!_blocked)
+  {
+    _blocked = c;
+    return;
+  }
+
+  Context *tail { _blocked };
+
+  while (tail->get_next_blocked())
+    tail = tail->get_next_blocked();
+
+  tail->set_next_blocked(c);
 }
+
+PRIVATE
+bool
+Sched_constraint::in_blocked_list(Context *c)
+{
+  assert(c);
+
+  Context *i { _blocked };
+
+  while (i)
+  {
+    if (c == i)
+     return true;
+
+    i = i->get_next_blocked();
+  }
+
+  return false;
+}
+
+IMPLEMENT
+void
+Sched_constraint::notify_blocked_delete(Context *c)
+{
+  assert(c);
+  assert(in_blocked_list(c));
+
+  if (c == _blocked)
+  {
+    _blocked = c->get_next_blocked();
+    c->set_blocked_on(nullptr);
+    c->set_next_blocked(nullptr);
+  }
+
+  Context *pre { _blocked };
+
+  while (c != pre->get_next_blocked())
+    pre = pre->get_next_blocked();
+
+  pre->set_next_blocked(c->get_next_blocked());
+  c->set_blocked_on(nullptr);
+  c->set_next_blocked(nullptr);
+}
+
+//PUBLIC static inline
+//Mword
+//Sched_constraint::sched_classes()
+//{
+//  return 1UL << (-L4_sched_param_fixed_prio::Class);
+//}
 
 PUBLIC
 void
@@ -401,14 +467,26 @@ Budget_sc::period_expired()
   calc_and_schedule_next_repl(current_cpu());
 
   Ready_queue &rq { Ready_queue::rq.current() };
-  //Context *curr = rq.current();
-  Context *curr = ::current();
+
+  Context *curr { ::current() };
+  Context *blocked { get_blocked() };
+  Context *next_blocked;
+
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[%p]: current: C[%p]\n", &rq, curr);
 
-  if ((curr != get_blocked())
-      && get_blocked()
-      && get_blocked()->state() & Thread_ready_mask)
-    rq.ready_enqueue(get_blocked());
+  while (blocked)
+  {
+    next_blocked = blocked->get_next_blocked();
+    blocked->set_blocked_on(nullptr);
+    blocked->set_next_blocked(nullptr);
+
+    if (blocked->state() & Thread_ready_mask)
+      rq.ready_enqueue(blocked);
+
+    blocked = next_blocked;
+  }
+
+  clear_blocked();
 
   if (curr && curr->sched_context_contains(this))
   {

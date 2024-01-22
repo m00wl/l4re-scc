@@ -44,8 +44,7 @@ IMPLEMENTATION:
 #include "timer.h"
 #include "timer_tick.h"
 #include "watchdog.h"
-#include "sched_context.h"
-#include "sc_scheduler.h"
+#include "sched_constraint.h"
 #include "ready_queue.h"
 
 /**

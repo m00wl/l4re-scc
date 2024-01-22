@@ -29,7 +29,7 @@ IMPLEMENTATION [mp]:
 #include "timer_tick.h"
 #include "spin_lock.h"
 #include "warn.h"
-#include "sched_context.h"
+#include "sched_constraint.h"
 #include "ready_queue.h"
 
 PUBLIC explicit inline

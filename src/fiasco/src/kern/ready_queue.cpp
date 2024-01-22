@@ -8,7 +8,6 @@ INTERFACE:
 #include <cxx/dlist>
 #include "per_cpu_data.h"
 #include "context.h"
-#include "sched_context.h"
 
 class Ready_queue
 {

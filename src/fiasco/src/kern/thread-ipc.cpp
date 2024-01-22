@@ -148,7 +148,6 @@ IMPLEMENTATION:
 #include "timer.h"
 #include "warn.h"
 #include "context.h"
-//#include "sc_scheduler.h"
 #include "ready_queue.h"
 
 PUBLIC
