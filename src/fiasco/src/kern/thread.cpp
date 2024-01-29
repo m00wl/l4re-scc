@@ -59,8 +59,6 @@ public:
     Op_set_tpidruro_arm = 0x10,
     Op_set_segment_base_amd64 = 0x12,
     Op_segment_info_amd64 = 0x13,
-    Op_clear_scs = 0x14,
-    Op_attach_sc = 0x15,
   };
 
   enum Control_flags
@@ -833,11 +831,15 @@ PUBLIC
 bool
 Thread::initiate_migration() override
 {
+  if (M_MIGRATION_DEBUG) printf("MIGRATION> C[%p]: initiate migration\n", this);
   assert (current() != this);
   Migration *inf = start_migration();
 
   if ((Mword)inf & 3)
+  {
+    if (M_MIGRATION_DEBUG) printf("MIGRATION> C[%p] already migrated, nothing to do.\n", this);
     return (Mword)inf & 1;
+  }
 
   spill_fpu_if_owner();
 
@@ -850,7 +852,10 @@ Thread::initiate_migration() override
 PUBLIC
 void
 Thread::finish_migration() override
-{ enqueue_timeout_again(); }
+{
+  if (M_MIGRATION_DEBUG) printf("MIGRATION> C[%p]: finish migration\n", this);
+  enqueue_timeout_again();
+}
 
 //---------------------------------------------------------------------------
 IMPLEMENTATION [fpu && !ux && lazy_fpu]:
@@ -1139,6 +1144,17 @@ Thread::migrate(Migration *info)
   //if (do_migration())
   //  SC_Scheduler::schedule(false);
   current()->schedule_if(do_migration());
+
+  //current()->schedule_if(!sched_context_is_ok());
+
+  ////if (is_blocked_on_sc())
+  ////  current()->schedule();
+  //if (!is_blocked_on_sc() && !sched_context_is_ok())
+  //{
+  //  Ready_queue &rq { Ready_queue::rq.current() };
+  //  rq.ready_dequeue(this);
+  //  current()->schedule();
+  //}
 }
 
 PRIVATE inline NOEXPORT
@@ -1205,6 +1221,16 @@ Thread::migrate(Migration *info)
     current()->schedule_if(do_migration());
   else
     current()->schedule_if(migrate_xcpu(cpu));
+
+  //current()->schedule_if(!sched_context_is_ok());
+  //if (is_blocked_on_sc())
+  //  current()->schedule();
+  //else if (!sched_context_is_ok())
+  //{
+  //  Ready_queue &rq { Ready_queue::rq.current() };
+  //  rq.ready_dequeue(this);
+  //  current()->schedule();
+  //}
 
   cpu_lock.clear();
   // FIXME: use monitor & mwait or wfe & sev if available
@@ -1428,10 +1454,14 @@ Thread::migrate_xcpu(Cpu_number cpu)
       // we have the rqq lock of 'cpu'
       if (!Cpu::online(cpu))
         {
+          if (M_MIGRATION_DEBUG) printf("MIGRATION> C[%p] migrating away from invalid cpu\n", this);
           Migration *inf = start_migration();
 
           if ((Mword)inf & 3)
+          {
+            if (M_MIGRATION_DEBUG) printf("MIGRATION> C[%p] already migrated, nothing to do.\n", this);
             return (Mword)inf & 1; // all done, nothing to do
+          }
 
           Cpu_number target_cpu = access_once(&inf->cpu);
           migrate_away(inf, true);

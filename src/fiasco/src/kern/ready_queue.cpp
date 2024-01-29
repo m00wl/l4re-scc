@@ -30,6 +30,7 @@ public:
 
   void ready_enqueue(Context *c)
   {
+    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[%p]: trying to enqueue C[%p]\n", this, c);
     assert(cpu_lock.test());
     assert(c->get_sched_context());
 
@@ -42,6 +43,7 @@ public:
 
   void ready_dequeue(Context *c)
   {
+    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[%p]: trying to dequeue C[%p]\n", this, c);
     assert (cpu_lock.test());
 
     // Don't dequeue threads which aren't enqueued
@@ -51,20 +53,20 @@ public:
     dequeue(c);
   }
 
-  void switch_sched(Context *from, Context *to)
-  {
-    assert (cpu_lock.test());
+  //void switch_sched(Context *from, Context *to)
+  //{
+  //  assert (cpu_lock.test());
 
-    // If we're leaving the global timeslice, invalidate it This causes
-    // schedule() to select a new timeslice via set_current_sched()
-    if (from == current())
-      invalidate_current();
+  //  // If we're leaving the global timeslice, invalidate it This causes
+  //  // schedule() to select a new timeslice via set_current_sched()
+  //  if (from == current())
+  //    invalidate_current();
 
-    if (from->in_ready_queue())
-      dequeue(from);
+  //  if (from->in_ready_queue())
+  //    dequeue(from);
 
-    enqueue(to, false);
-  }
+  //  enqueue(to, false);
+  //}
 
   Context *schedule_in_progress;
 
@@ -110,6 +112,7 @@ Ready_queue::enqueue(Context *c, bool is_current)
     prio_highest = prio;
 
   queue[prio].push(c, is_current? Queue::Front : Queue::Back);
+
   _c++;
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[addr: %p, entries: %d]: enqueue C[%p]\n", this, _c, c);
 }
@@ -134,7 +137,7 @@ Ready_queue::dequeue(Context *c)
   while (queue[prio_highest].empty() && prio_highest)
     prio_highest--;
   _c--;
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[addr:%p, entries: %d]: dequeue C[%p]\n", this, _c, c);
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[addr: %p, entries: %d]: dequeue C[%p]\n", this, _c, c);
 }
       
       

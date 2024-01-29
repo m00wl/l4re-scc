@@ -55,7 +55,7 @@ public:
 
   enum Type
   {
-    //Timeslice_sc,
+    //Quant_sc,
     Budget_sc,
     Timer_window_sc,
   };
@@ -157,11 +157,23 @@ private:
   Repl_timeout _repl_timeout;
 };
 
-class Timewindow_sc : public Sched_constraint
+class Timer_window_sc : public Sched_constraint
 {
 private:
-  Unsigned64 _min;
-  Unsigned64 _max;
+  class Timer_window_sc_timeout : public Timeout
+  {
+  public:
+    Timer_window_sc_timeout(Timer_window_sc *sc) : _sc(sc)
+    {}
+
+  private:
+    bool expired() override;
+    Timer_window_sc *_sc;
+  };
+
+  Unsigned64 _start;
+  Unsigned64 _duration;
+  Timer_window_sc_timeout _timeout;
 };
 
 // --------------------------------------------------------------------------
@@ -202,8 +214,11 @@ void
 Sched_constraint::set_blocked(Context *c)
 {
   assert(c);
+  assert(!c->is_blocked_on_sc());
   assert(!c->get_next_blocked());
   assert(!in_blocked_list(c));
+
+  c->set_blocked_on(this);
 
   if (!_blocked)
   {
@@ -262,6 +277,39 @@ Sched_constraint::notify_blocked_delete(Context *c)
   c->set_next_blocked(nullptr);
 }
 
+PROTECTED
+void
+Sched_constraint::wake_up_all_blocked()
+{
+  Ready_queue &rq { Ready_queue::rq.current() };
+  //Context *current { ::current() };
+  Context *blocked { get_blocked() };
+  Context *next_blocked;
+
+  while (blocked)
+  {
+    next_blocked = blocked->get_next_blocked();
+    blocked->set_blocked_on(nullptr);
+    blocked->set_next_blocked(nullptr);
+
+    //if (blocked == current)
+    //{
+    //  printf("SC[%p]: requeing C[%p]\n", this, blocked);
+    //  rq.requeue(blocked);
+    //}
+    //else if (blocked->state() & Thread_ready_mask)
+    if (blocked->state() & Thread_ready_mask)
+    {
+      if (M_SCHEDULER_DEBUG) printf("SC[%p]: waking up C[%p]\n", this, blocked);
+      rq.ready_enqueue(blocked);
+    }
+
+    blocked = next_blocked;
+  }
+
+  clear_blocked();
+}
+
 //PUBLIC static inline
 //Mword
 //Sched_constraint::sched_classes()
@@ -283,7 +331,7 @@ static Kobject_iface * FIASCO_FLATTEN
 sched_constraint_factory(Ram_quota *q, Space *, L4_msg_tag t, Utcb const *u,
                          int *err)
 {
-  if (t.words() != 3)
+  if (t.words() < 3)
   {
     *err = L4_err::EInval;
     return nullptr;
@@ -299,6 +347,9 @@ sched_constraint_factory(Ram_quota *q, Space *, L4_msg_tag t, Utcb const *u,
   {
     case Sched_constraint::Type::Budget_sc:
       res = Budget_sc::create(q);
+      break;
+    case Sched_constraint::Type::Timer_window_sc:
+      res = Timer_window_sc::create(q, t, u);
       break;
     default:
       *err = L4_err::EInval;
@@ -463,36 +514,23 @@ Budget_sc::period_expired()
 {
   // TOMO: requeue here?
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> BSC[%p]: period_expired\n", this);
+  //printf("SCHEDULER> BSC[%p]: period_expired\n", this);
   replenish();
   calc_and_schedule_next_repl(current_cpu());
 
-  Ready_queue &rq { Ready_queue::rq.current() };
+  wake_up_all_blocked();
 
   Context *curr { ::current() };
-  Context *blocked { get_blocked() };
-  Context *next_blocked;
-
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[%p]: current: C[%p]\n", &rq, curr);
-
-  while (blocked)
-  {
-    next_blocked = blocked->get_next_blocked();
-    blocked->set_blocked_on(nullptr);
-    blocked->set_next_blocked(nullptr);
-
-    if (blocked->state() & Thread_ready_mask)
-      rq.ready_enqueue(blocked);
-
-    blocked = next_blocked;
-  }
-
-  clear_blocked();
 
   if (curr && curr->sched_context_contains(this))
   {
     _oob_timeout.reset();
     activate();
   }
+
+  //printf("hello requeue\n");
+  //Ready_queue &rq { Ready_queue::rq.current() };
+  //rq.requeue(curr);
 
   //reschedule, if the replenished thread can preempt the current thread.
   return true;
@@ -584,4 +622,126 @@ Budget_sc::print()
   printf("SC[%p]: SYSCALL print!\n", this);
   return commit_result(0);
 }
+
+static Kmem_slab_t<Timer_window_sc> _timer_window_sc_allocator("Timer_window_sc");
+
+PRIVATE static
+Timer_window_sc::Self_alloc *
+Timer_window_sc::allocator()
+{ return _timer_window_sc_allocator.slab(); }
+
+PUBLIC inline
+void
+Timer_window_sc::operator delete (void *ptr)
+{
+  Timer_window_sc *sc = reinterpret_cast<Timer_window_sc *>(ptr);
+  allocator()->q_free<Ram_quota>(sc->get_quota(), sc);
+}
+
+PUBLIC static
+Timer_window_sc *
+Timer_window_sc::create(Ram_quota *q, L4_msg_tag t, Utcb const *u)
+{
+  assert(t.words() == 7);
+
+  Unsigned64 start = u->values[4];
+  Unsigned64 duration = u->values[6];
+
+  return create(q, start, duration);
+}
+
+PUBLIC static
+Timer_window_sc *
+Timer_window_sc::create(Ram_quota *q, Unsigned64 s, Unsigned64 d)
+{
+  void *p = allocator()->q_alloc<Ram_quota>(q);
+  return p ? new (p) Timer_window_sc(q, s, d) : 0;
+}
+
+PUBLIC
+Timer_window_sc::Timer_window_sc(Ram_quota *q, Unsigned64 s, Unsigned64 d)
+: Sched_constraint(q),
+  _start(s),
+  _duration(d),
+  _timeout(this)
+{
+  Unsigned64 now = Timer::system_clock();
+  bool in_window;
+  in_window = ((now >= s) && (now <= s + d));
+  set_run(in_window);
+}
+
+PRIVATE
+void
+Timer_window_sc::calc_and_schedule_next_timeout(Cpu_number target)
+{
+  Unsigned64 now { Timer::system_clock() };
+
+  if (now >= _start + _duration)
+    return;
+
+  Unsigned64 time;
+
+  if (!can_run())
+  {
+    if (_start < now)
+      return;
+
+    assert(!_timeout.is_set());
+    time = _start;
+  }
+  else
+  {
+    assert(now <= (_start + _duration));
+    assert(!_timeout.is_set());
+
+    time = _start + _duration;
+  }
+
+  if (M_SCHEDULER_DEBUG) printf("TWSC[%p]: setting timeout @ %llu\n", this, time);
+  _timeout.set(time, target);
+}
+
+PRIVATE
+void
+Timer_window_sc::flip_state()
+{
+  set_run(!can_run());
+  _timeout.reset();
+  calc_and_schedule_next_timeout(current_cpu());
+  if (can_run())
+    wake_up_all_blocked();
+}
+
+IMPLEMENT
+bool
+Timer_window_sc::Timer_window_sc_timeout::expired()
+{
+  Unsigned64 now = Timer::system_clock();
+  if (M_SCHEDULER_DEBUG) printf("TWSC[%p]: timeout expired @ %llu\n", this, now);
+  _sc->flip_state();
+
+  // force reschedule.
+  return true;
+}
+
+PUBLIC
+void
+Timer_window_sc::deactivate() override
+{}
+
+PUBLIC
+void
+Timer_window_sc::activate() override
+{}
+
+PUBLIC
+void
+Timer_window_sc::migrate_away() override
+{ _timeout.reset(); }
+
+PUBLIC
+void
+Timer_window_sc::migrate_to(Cpu_number target) override
+{ calc_and_schedule_next_timeout(target); }
 

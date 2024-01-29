@@ -493,6 +493,7 @@ Context::Context()
   _next_blocked(nullptr)
 {
   _home_cpu = Cpu::invalid();
+  printf("C[%p]: created\n", this);
 }
 
 PUBLIC inline
@@ -745,7 +746,6 @@ PUBLIC
 void
 Context::schedule()
 {
-  //printf("%p\n", __builtin_return_address(0));
   //auto current = SC_Scheduler::get_current();
   //auto prio = current->prio();
   //auto &rq = Ready_queue::rq.current();
@@ -797,6 +797,7 @@ Context::schedule()
   // Select a thread for scheduling.
   Context *next_to_run;
 
+  assert(!is_blocked_on_sc());
   for (;;)
     {
       next_to_run = rq->next_to_run();
@@ -804,8 +805,6 @@ Context::schedule()
       // Ensure ready-list sanity
       assert (next_to_run);
 
-      if(!next_to_run->sched_context_is_ok())
-        rq->ready_dequeue(next_to_run);
       if (EXPECT_FALSE(!(next_to_run->state() & Thread_ready_mask)))
         rq->ready_dequeue(next_to_run);
       else switch (schedule_switch_to_locked(next_to_run))
@@ -896,17 +895,15 @@ PUBLIC
 void
 Context::change_prio_to(Unsigned8 p)
 {
-  Ready_queue &rq { Ready_queue::rq.current() };
+  bool do_rq = in_ready_queue();
 
-  if (this == rq.current())
-    rq.invalidate_current();
-
-  if (this->in_ready_queue())
-    rq.dequeue(this);
+  if (do_rq)
+    Ready_queue::rq.cpu(home_cpu()).ready_dequeue(this);
 
   _prio = p;
 
-  rq.enqueue(this, false);
+  if (do_rq)
+    Ready_queue::rq.cpu(home_cpu()).ready_enqueue(this);
 }
 
 PUBLIC
@@ -918,6 +915,11 @@ PUBLIC
 void
 Context::set_blocked_on(Sched_constraint *sc)
 { _blocked_on = sc; }
+
+PUBLIC
+bool
+Context::is_blocked_on_sc() const
+{ return (_blocked_on != nullptr); }
 
 PUBLIC
 Context *
@@ -953,7 +955,10 @@ Context::switch_sched_context(Context *to)
   // Don't switch the scheduling context, if the old thread is helping the
   // new one.
   if (EXPECT_FALSE(to->helper() == this))
+  {
+    printf("\033[1;31mC[%p] is helping C[%p]\033[0m\n", this, to);
     return;
+  }
 
   // The old thread might have had a helper and might run with their
   // scheduling context.
@@ -962,11 +967,21 @@ Context::switch_sched_context(Context *to)
   to->activate_sched_context();
 }
 
-PRIVATE
+PROTECTED
 bool
 Context::sched_context_is_ok()
+{ return is_blocked_on_sc() ? false : sched_context_can_run(); }
+
+PRIVATE
+bool
+Context::sched_context_can_run()
 {
+  // TOMO: we could maybe relax this here.
+  // threads can be in the ready although they don't have *any* constraint attached to them.
+  // in this case, sched_context can NOT run (obviously), but we also don't need to block on anything.
+  // we rely on the userspace to attach an SC eventually?
   assert(_sched_context);
+  assert(!is_blocked_on_sc());
   // TOMO: should probably lock this.
   Sched_constraint *sc { _sched_context };
 
@@ -974,6 +989,7 @@ Context::sched_context_is_ok()
   {
     if (!sc->can_run())
     {
+      if (M_SCHEDULER_DEBUG) printf("C[%p] blocking on SC[%p]\n", this, sc);
       sc->set_blocked(this);
       return false;
     }
@@ -1476,6 +1492,12 @@ Context::switch_exec_locked(Context *t, enum Helping_mode mode = Not_Helping)
       return Switch::Failed;
     }
 
+  // Can only switch to threads with valid sched_context.
+  if (EXPECT_FALSE(!(t->sched_context_is_ok())))
+    {
+      Ready_queue::rq.current().ready_dequeue(t);
+      return Switch::Failed;
+    }
 
   // Ensure kernel stack pointer is non-null if thread is ready
   assert (t->_kernel_sp);
