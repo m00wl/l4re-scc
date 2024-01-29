@@ -14,8 +14,9 @@ class Sched_constraint
 public:
   enum Type
   {
+    //Quant_sc,
     Budget_sc,
-    Time_window_sc,
+    Timer_window_sc,
   };
 
 };
@@ -37,19 +38,19 @@ public:
   typedef L4::Typeid::Rpcs_sys<test_t, print_t> Rpcs;
 };
 
-class L4_EXPORT Time_window_sc :
+class L4_EXPORT Timer_window_sc :
   public Sched_constraint,
-  public Kobject_t<Time_window_sc, L4::Kobject, L4_PROTO_SCHED_CONSTRAINT>
+  public Kobject_t<Timer_window_sc, L4::Kobject, L4_PROTO_SCHED_CONSTRAINT>
 {
 public:
-  enum L4_time_window_sc_ops
-  {
-    L4_TIME_WINDOW_SC_PRINT_OP = 16UL,
-  };
+  //enum L4_timer_window_sc_ops
+  //{
+  //  L4_TIMER_WINDOW_SC_PRINT_OP = 16UL,
+  //};
 
-  L4_INLINE_RPC_OP(L4_TIME_WINDOW_SC_PRINT_OP, l4_msgtag_t, print, ());
+  //L4_INLINE_RPC_OP(L4_TIMER_WINDOW_SC_PRINT_OP, l4_msgtag_t, print, ());
 
-  typedef L4::Typeid::Rpcs_sys<print_t> Rpcs;
+  //typedef L4::Typeid::Rpcs_sys<print_t> Rpcs;
 };
 
 }
