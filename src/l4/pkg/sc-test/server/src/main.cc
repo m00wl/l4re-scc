@@ -74,11 +74,20 @@ int main(void)
   s->run_thread(t1, sp);
   s->run_thread(t2, sp);
 
+  for(int i = 0; i < 15; i++)
+  {
+    printf("%lld\n", l4_kip_clock(l4re_kip()));
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+
+  s->detach_sc(t2, sc);
+
   for(;;)
   {
     printf("%lld\n", l4_kip_clock(l4re_kip()));
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
+
   //pthread_join(thread1, nullptr);
   //pthread_join(thread2, nullptr);
 
