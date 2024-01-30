@@ -202,7 +202,8 @@ Scheduler::sys_detach_sc(Syscall_frame *f, Utcb const *utcb)
   if (!sc)
     return tag;
 
-  printf("ready to detach sc now!\n");
+  thread->detach_sc(sc);
+  thread->print_sched_context();
 
   return commit_result(0);
 

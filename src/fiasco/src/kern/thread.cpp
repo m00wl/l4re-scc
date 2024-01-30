@@ -596,8 +596,8 @@ Thread::do_kill()
   force_to_invalid_cpu();
   deactivate_sched_context();
   migrate_sched_context_away();
-  if (get_blocked_on())
-    get_blocked_on()->notify_blocked_delete(this);
+  if (is_blocked_on_sc())
+    get_blocked_on()->notify_blocked_detach(this);
   kernel_context_drq(handle_kill_helper, 0);
   kdb_ke("I'm dead");
   return true;

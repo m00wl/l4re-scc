@@ -46,7 +46,7 @@ public:
 
   void set_blocked(Context *c);
 
-  void notify_blocked_delete(Context *c);
+  void notify_blocked_detach(Context *c);
 
   virtual void deactivate() = 0;
   virtual void activate() = 0;
@@ -207,7 +207,11 @@ Sched_constraint::Sched_constraint(Ram_quota *q)
 
 PUBLIC
 Sched_constraint::~Sched_constraint()
-{ printf("SC[%p]: delete\n", this); }
+{
+  printf("SC[%p]: delete\n", this);
+  if (ref_cnt())
+    panic("trying to delete SC although it is still attached to a thread");
+}
 
 IMPLEMENT
 void
@@ -255,7 +259,7 @@ Sched_constraint::in_blocked_list(Context *c)
 
 IMPLEMENT
 void
-Sched_constraint::notify_blocked_delete(Context *c)
+Sched_constraint::notify_blocked_detach(Context *c)
 {
   assert(c);
   assert(in_blocked_list(c));
@@ -265,6 +269,7 @@ Sched_constraint::notify_blocked_delete(Context *c)
     _blocked = c->get_next_blocked();
     c->set_blocked_on(nullptr);
     c->set_next_blocked(nullptr);
+    return;
   }
 
   Context *pre { _blocked };

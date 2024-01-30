@@ -1129,24 +1129,31 @@ Context::detach_sc(Sched_constraint *sc)
   Sched_constraint *pre { nullptr };
   Sched_constraint *cur { _sched_context };
 
-  if (cur && cur == sc)
-  {
-    _sched_context = cur->get_next();
-    cur->dec_ref();
-    return;
-  }
-
-  while (cur && cur != sc)
-  {
-    pre = cur;
-    cur = cur->get_next();
-  }
-
   if (!cur)
-    return;
+    return; // no sched_context
 
-  pre->set_next(cur->get_next());
-  cur->dec_ref();
+  if (cur == sc)
+    _sched_context = cur->get_next();
+  else
+  {
+    while (cur && cur != sc)
+    {
+      pre = cur;
+      cur = cur->get_next();
+    }
+
+    if (!cur)
+      return; // sc was not in sched_context
+
+    pre->set_next(cur->get_next());
+  }
+
+  sc->dec_ref();
+  if (_blocked_on == sc)
+  {
+    sc->notify_blocked_detach(this);
+    Ready_queue::rq.current().ready_enqueue(this);
+  }
 }
 
 PUBLIC
