@@ -203,7 +203,7 @@ Sched_constraint::Sched_constraint(Ram_quota *q)
 : _quota(q),
   _next(nullptr),
   _run(false)
-{}
+{ printf("SC[%p]: created\n", this); }
 
 PUBLIC
 Sched_constraint::~Sched_constraint()

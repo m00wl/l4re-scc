@@ -13,17 +13,19 @@ class Scheduler : public Icu_h<Scheduler>, public Irq_chip_soft
 public:
   enum Operation
   {
-    Info       = 0,
-    Run_thread = 1,
-    Idle_time  = 2,
-    Set_prio   = 3,
-    Attach_sc  = 4,
-    Detach_sc  = 5,
+    Info          = 0,
+    Run_thread    = 1,
+    Idle_time     = 2,
+    Set_prio      = 3,
+    Attach_sc     = 4,
+    Detach_sc     = 5,
+    Set_global_sc = 6,
   };
 
   static Scheduler scheduler;
 private:
   Irq_base *_irq;
+  Sched_constraint *_global_sc;
 
   L4_RPC(Info,      sched_info, (L4_cpu_set_descr set, Mword *rm,
                                  Mword *max_cpus, Mword *sched_classes));
@@ -49,7 +51,7 @@ Scheduler::operator delete (void *)
 }
 
 PUBLIC inline
-Scheduler::Scheduler() : _irq(0)
+Scheduler::Scheduler() : _irq(0), _global_sc(0)
 {
   initial_kobjects.register_obj(this, Initial_kobjects::Scheduler);
 }
@@ -121,6 +123,10 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
     thread->alloc_sched_context();
   }
 
+  // TOMO: what happens if attach_sc fails?
+  if (_global_sc)
+    thread->attach_sc(_global_sc);
+
   thread->migrate(&info);
 
   return commit_result(0);
@@ -151,10 +157,11 @@ Scheduler::sys_attach_sc(Syscall_frame *f, Utcb const *utcb)
 {
   L4_msg_tag tag = f->tag();
   Ko::Rights rights;
-  L4_snd_item_iter snd_items(utcb, tag.words());
 
-  if (!tag.items())
+  if (tag.items() != 2)
     return commit_result(-L4_err::EInval);
+
+  L4_snd_item_iter snd_items(utcb, tag.words());
 
   Space *const space = ::current()->space();
   if (!space)
@@ -185,7 +192,7 @@ Scheduler::sys_detach_sc(Syscall_frame *f, Utcb const *utcb)
   Ko::Rights rights;
   L4_snd_item_iter snd_items(utcb, tag.words());
 
-  if (!tag.items())
+  if (tag.items() != 2)
     return commit_result(-L4_err::EInval);
 
   Space *const space = ::current()->space();
@@ -206,7 +213,23 @@ Scheduler::sys_detach_sc(Syscall_frame *f, Utcb const *utcb)
   thread->print_sched_context();
 
   return commit_result(0);
+}
 
+PRIVATE
+L4_msg_tag
+Scheduler::sys_set_global_sc(Syscall_frame *f, Utcb const *utcb)
+{
+  L4_msg_tag tag { f->tag() };
+  Ko::Rights rights;
+
+  Sched_constraint *sc { Ko::deref<Sched_constraint>(&tag, utcb, &rights) };
+
+  if (!sc)
+    return tag;
+
+  _global_sc = sc;
+
+  return commit_result(0);
 }
 
 PRIVATE
@@ -333,6 +356,8 @@ Scheduler::kinvoke(L4_obj_ref ref, L4_fpage::Rights rights, Syscall_frame *f,
       return sys_attach_sc(f, iutcb);
     case Detach_sc:
       return sys_detach_sc(f, iutcb);
+    case Set_global_sc:
+      return sys_set_global_sc(f, iutcb);
     default:
       return commit_result(-L4_err::ENosys);
     }

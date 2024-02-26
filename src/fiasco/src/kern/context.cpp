@@ -1149,6 +1149,11 @@ Context::detach_sc(Sched_constraint *sc)
   }
 
   sc->dec_ref();
+
+  // if sc is attached to no other contexts, remove it from any sc queues
+  if (sc->ref_cnt() == 0)
+    sc->set_next(nullptr);
+
   if (_blocked_on == sc)
   {
     sc->notify_blocked_detach(this);
@@ -1526,7 +1531,7 @@ PUBLIC
 Context::Switch
 Context::switch_exec_helping(Context *t, Mword const *lock, Mword val)
 {
-  panic("scheduling context activation after switch_exec_helping not implemented");
+  panic("switch exec helping");
   // Must be called with CPU lock held
   assert (t);
   assert (cpu_lock.test());
