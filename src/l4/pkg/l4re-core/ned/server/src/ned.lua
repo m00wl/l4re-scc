@@ -31,6 +31,7 @@ Proto = {
   Irq_sender = -18,
   Semaphore  = -20,
   Iommu      = -22,
+  Sched_constraint = -25,
   Ipc_gate  = 0,
 }
 
@@ -73,6 +74,13 @@ Dbg = {
   Loader     = 0x80,
   Name_space = 0x400,
   All        = 0xffffffff,
+}
+
+-- Sched_constraint types
+SC_types = {
+  --Quant_sc        = 0,
+  Budget_sc       = 0,
+  Timer_window_sc = 1,
 }
 
 -- Loader class, encapsulates a loader instance.

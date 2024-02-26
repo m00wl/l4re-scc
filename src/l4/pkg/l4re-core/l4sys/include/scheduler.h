@@ -261,12 +261,13 @@ l4_scheduler_is_online_u(l4_cap_idx_t scheduler, l4_umword_t cpu,
  */
 enum L4_scheduler_ops
 {
-  L4_SCHEDULER_INFO_OP       = 0UL, /**< Query infos about the scheduler */
-  L4_SCHEDULER_RUN_THREAD_OP = 1UL, /**< Run a thread on this scheduler */
-  L4_SCHEDULER_IDLE_TIME_OP  = 2UL, /**< Query idle time for the scheduler */
-  L4_SCHEDULER_SET_PRIO_OP   = 3UL,
-  L4_SCHEDULER_ATTACH_SC_OP  = 4UL,
-  L4_SCHEDULER_DETACH_SC_OP  = 5UL,
+  L4_SCHEDULER_INFO_OP           = 0UL, /**< Query infos about the scheduler */
+  L4_SCHEDULER_RUN_THREAD_OP     = 1UL, /**< Run a thread on this scheduler */
+  L4_SCHEDULER_IDLE_TIME_OP      = 2UL, /**< Query idle time for the scheduler */
+  L4_SCHEDULER_SET_PRIO_OP       = 3UL,
+  L4_SCHEDULER_ATTACH_SC_OP      = 4UL,
+  L4_SCHEDULER_DETACH_SC_OP      = 5UL,
+  L4_SCHEDULER_SET_GLOBAL_SC_OP  = 6UL,
 };
 
 /*************** Implementations *******************/

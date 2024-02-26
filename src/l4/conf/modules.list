@@ -67,6 +67,14 @@ module ned
 module hello.cfg
 module hello
 
+entry hello-sc-cfg
+kernel fiasco -serial_esc
+roottask moe rom/hello-sc.cfg
+module l4re
+module ned
+module hello-sc.cfg
+module hello
+
 entry sc-test
 kernel fiasco -serial_esc
 roottask moe rom/sc-test.cfg

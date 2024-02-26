@@ -264,7 +264,9 @@ public:
   {
     l4_utcb_br_u(utcb)->br[0] = L4::Ipc::Small_buf(Rcv_cap << L4_CAP_SHIFT,
                                                    L4_RCV_ITEM_LOCAL_ID).raw();
-    l4_utcb_br_u(utcb)->br[1] = 0;
+    l4_utcb_br_u(utcb)->br[1] = L4::Ipc::Small_buf((Rcv_cap + 1) << L4_CAP_SHIFT,
+                                                   L4_RCV_ITEM_LOCAL_ID).raw();
+    l4_utcb_br_u(utcb)->br[2] = 0;
     l4_utcb_br_u(utcb)->bdr = 0;
   }
 };

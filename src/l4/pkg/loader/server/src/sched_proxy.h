@@ -24,7 +24,7 @@ public:
   Sched_proxy();
   ~Sched_proxy();
 
-  // need this because of the wierd Scheduler_svr construction
+  // need this because of the weird Scheduler_svr construction
   Server_iface *server_iface() const
   { return L4::Epiface::server_iface(); }
 
@@ -37,7 +37,7 @@ public:
   int idle_time(l4_sched_cpu_set_t const &cpus, l4_kernel_clock_t &)
     override;
 
-  int set_prio(L4::Cap<L4::Thread> thread, unsigned prio)
+  int set_prio(L4::Cap<L4::Thread> thread, l4_uint8_t const &prio)
     override;
 
   int attach_sc(L4::Cap<L4::Thread> thread, L4::Cap<L4::Sched_constraint> sc)
@@ -46,11 +46,14 @@ public:
   int detach_sc(L4::Cap<L4::Thread> thread, L4::Cap<L4::Sched_constraint> sc)
     override;
 
+  int set_global_sc(L4::Cap<L4::Sched_constraint> sc)
+    override;
+
   void set_prio(unsigned offs, unsigned limit)
   { _prio_offset = offs; _prio_limit = limit; }
 
   L4::Cap<L4::Thread> received_thread(L4::Ipc::Snd_fpage const &fp);
-  L4::Cap<L4::Sched_constraint> received_sc(L4::Ipc::Snd_fpage const &fp);
+  L4::Cap<L4::Sched_constraint> received_sc(L4::Ipc::Snd_fpage const &fp, int idx);
 
   void restrict_cpus(l4_umword_t cpus);
   void rescan_cpus_and_classes();
@@ -65,5 +68,7 @@ private:
 
   typedef cxx::H_list_bss<Sched_proxy> List;
   static List _list;
+
+  L4::Cap<L4::Sched_constraint> _global_sc;
 };
 

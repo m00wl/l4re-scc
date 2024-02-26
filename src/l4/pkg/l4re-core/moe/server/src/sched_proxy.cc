@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <l4/re/env>
 #include <l4/sys/scheduler>
+#include <l4/sys/sched_constraint>
 
 //#include <cstdio>
 
@@ -82,7 +83,7 @@ Sched_proxy::Sched_proxy() :
   Icu(1, &_scheduler_irq),
   _real_cpus(l4_sched_cpu_set(0, 0, 0)), _cpu_mask(_real_cpus),
   _max_cpus(0), _sched_classes(0),
-  _prio_offset(0), _prio_limit(0)
+  _prio_offset(0), _prio_limit(0), _global_sc(L4::Cap<L4::Sched_constraint>::Invalid)
 {
   rescan_cpus_and_classes();
   _list.push_front(this);
@@ -154,6 +155,12 @@ Sched_proxy::run_thread(L4::Cap<L4::Thread> thread, l4_sched_param_t const &sp)
              this, s.affinity.map, s.affinity.offset(),
              s.affinity.granularity());
     }
+  if (_global_sc.is_valid())
+  {
+    auto tag = L4Re::Env::env()->scheduler()->attach_sc(thread, _global_sc);
+    if (tag.has_error())
+      return -L4_EINVAL;
+  }
   return l4_error(L4Re::Env::env()->scheduler()->run_thread(thread, s));
 }
 
@@ -162,33 +169,46 @@ Sched_proxy::idle_time(l4_sched_cpu_set_t const &, l4_kernel_clock_t &)
 { return -L4_ENOSYS; }
 
 int
-Sched_proxy::set_prio(L4::Cap<L4::Thread> thread, unsigned prio)
+Sched_proxy::set_prio(L4::Cap<L4::Thread> thread, l4_uint8_t const &prio)
 {
-  (void)thread;
-  (void)prio;
-  return -L4_ENOSYS;
-  //prio = std::min(prio + _prio_offset, _prio_limit);
-  //return l4_error(L4Re::Env::env()->scheduler()->set_prio(thread, prio));
+  //(void)thread;
+  //(void)prio;
+  //return -L4_ENOSYS;
+  l4_uint8_t const p = std::min(prio + _prio_offset, _prio_limit);
+  return l4_error(L4Re::Env::env()->scheduler()->set_prio(thread, p));
 }
 
 int
 Sched_proxy::attach_sc(L4::Cap<L4::Thread> thread,
                        L4::Cap<L4::Sched_constraint> sc)
 {
-  (void)thread;
-  (void)sc;
-  return -L4_ENOSYS;
-  //return l4_error(L4Re::Env::env()->scheduler()->attach_sc(thread, sc));
+  //(void)thread;
+  //(void)sc;
+  //return -L4_ENOSYS;
+  return l4_error(L4Re::Env::env()->scheduler()->attach_sc(thread, sc));
 }
 
 int
 Sched_proxy::detach_sc(L4::Cap<L4::Thread> thread,
                        L4::Cap<L4::Sched_constraint> sc)
 {
-  (void)thread;
-  (void)sc;
-  return -L4_ENOSYS;
-  //return l4_error(L4Re::Env::env()->scheduler()->detach_sc(thread, sc));
+  //(void)thread;
+  //(void)sc;
+  //return -L4_ENOSYS;
+  return l4_error(L4Re::Env::env()->scheduler()->detach_sc(thread, sc));
+}
+
+int
+Sched_proxy::set_global_sc(L4::Cap<L4::Sched_constraint> sc)
+{
+  // TOMO:
+  // sc points to the first cap slot in our IPC receive buffer
+  // we need to allocate a new cap slot and copy sc over.
+  // otherwise, sc will keep pointing to the first slot and to potentially
+  // different objects in subsequent IPCs.
+  _global_sc = object_pool.cap_alloc()->alloc<L4::Sched_constraint>();
+  _global_sc.copy(sc);
+  return L4_EOK;
 }
 
 L4::Cap<L4::Thread>
@@ -201,12 +221,12 @@ Sched_proxy::received_thread(L4::Ipc::Snd_fpage const &fp)
 }
 
 L4::Cap<L4::Sched_constraint>
-Sched_proxy::received_sc(L4::Ipc::Snd_fpage const &fp)
+Sched_proxy::received_sc(L4::Ipc::Snd_fpage const &fp, int idx)
 {
   if (!fp.cap_received())
     return L4::Cap<L4::Sched_constraint>::Invalid;
 
-  return L4::Cap<L4::Sched_constraint>((Rcv_cap + 1) << L4_CAP_SHIFT);
+  return L4::Cap<L4::Sched_constraint>((Rcv_cap + idx) << L4_CAP_SHIFT);
 }
 
 void
