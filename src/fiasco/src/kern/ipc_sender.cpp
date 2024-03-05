@@ -69,7 +69,7 @@ Ipc_sender_base::handle_shortcut(Syscall_frame *dst_regs,
 
   if (EXPECT_TRUE
       ((current() != receiver
-        && rq.deblock(receiver, current(), true)
+        && rq.deblock(receiver->sched(), current()->sched(), true)
         // avoid race in do_ipc() after Thread_send_in_progress
         // flag was deleted from receiver's thread state
         // also: no shortcut for alien threads, they need to see the
@@ -169,7 +169,7 @@ Ipc_sender<Derived>::send_msg(Receiver *receiver, bool is_not_xcpu)
           // we don't need to manipulate the state in a safe way
           // because we are still running with interrupts turned off
           receiver->state_add_dirty(Thread_ready);
-          return rq.deblock(receiver, current(), false);
+          return rq.deblock(receiver->sched(), current()->sched(), false);
         }
 
       // receiver's CPU is offline ----------------------------------------
@@ -178,8 +178,8 @@ Ipc_sender<Derived>::send_msg(Receiver *receiver, bool is_not_xcpu)
       // we don't need to manipulate the state in a safe way
       // because we are still running with interrupts turned off
       receiver->state_add_dirty(Thread_ready);
-      rq.deblock_refill(receiver);
-      rq.ready_enqueue(receiver);
+      rq.deblock_refill(receiver->sched());
+      rq.ready_enqueue(receiver->sched());
       return false;
     }
 

@@ -269,16 +269,16 @@ config UX_NET
 	  Enabling this option makes Fiasco-UX provide network support for
 	  L4 programs.
 
-choice
-	prompt "Scheduler"
-	default SCHED_FCC
-
-config SCHED_FCC
-  bool "Scheduling contexts as first-class citizens"
-  help
-    Choose this scheduler to promote Scheduling contexts to
-    first-class citizens.
-
+#choice
+#	prompt "Scheduler"
+#	default SCHED_FCC
+#
+#config SCHED_FCC
+#  bool "Scheduling contexts as first-class citizens"
+#  help
+#    Choose this scheduler to promote Scheduling contexts to
+#    first-class citizens.
+#
 #config SCHED_FIXED_PRIO
 #	bool "Fixed priority scheduler"
 #	help
@@ -298,8 +298,8 @@ config SCHED_FCC
 #	help
 #	  Combination of Fixed priority and weighted fair queueing
 #	  scheduler.
-
-endchoice
+#
+#endchoice
 
 config IOMMU
 	bool "Enable support for DMA remapping" if HAS_IOMMU_OPTION

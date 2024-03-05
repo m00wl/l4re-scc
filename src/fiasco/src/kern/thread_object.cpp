@@ -621,15 +621,14 @@ Thread_object::sys_ex_regs(L4_msg_tag const &tag, Utcb *utcb, Utcb *out)
   params.thread = current_thread();
   params.have_recv = (utcb == out);
 
-  if (!get_sched_context())
+  if (!sched()->is_constrained())
   {
-    panic("no sched_context (thread_object)");
+    panic("sched_context has no sched_constraint (thread_object)");
     if (M_SCHEDULER_DEBUG)
     {
-      printf("SCHEDULER> trying to sys_ex_regs remote thread %p which has no sched_context attached.\n", this);
-      printf("SCHEDULER> creating a new one...\n");
+      printf("SCHEDULER> trying to sys_ex_regs thread %p whose sched_context has no sched_constraints attached.\n", this);
     }
-    alloc_sched_context();
+    alloc_sched_constraints();
   }
 
   drq(handle_remote_ex_regs, &params);

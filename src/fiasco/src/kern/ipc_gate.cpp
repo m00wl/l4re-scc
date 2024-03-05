@@ -333,7 +333,7 @@ Ipc_gate::block(Thread *ct, L4_timeout const &to, Utcb *u)
     {
       auto g = lock_guard(_wait_q.lock());
       ct->set_wait_queue(&_wait_q);
-      ct->sender_enqueue(&_wait_q, ct->get_prio());
+      ct->sender_enqueue(&_wait_q, ct->sched()->prio());
     }
   ct->state_change_dirty(~Thread_ready, Thread_send_wait);
 

@@ -215,6 +215,7 @@ perf_cnt_IMPL		:= perf_cnt perf_cnt-arm perf_cnt-arm-$(BITS)
 pic_IMPL		:= pic
 platform_control_IMPL   += platform_control-arm-psci
 psci_IMPL		:= psci-arm
+sched_context_IMPL  := sched_context
 sched_constraint_IMPL	:= sched_constraint
 ready_queue_IMPL	:= ready_queue
 scu_IMPL                := scu

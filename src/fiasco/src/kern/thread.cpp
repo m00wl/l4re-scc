@@ -304,18 +304,18 @@ Thread::~Thread()		// To be called in locked state.
   _kernel_sp = 0;
   *--init_sp = 0;
   Fpu_alloc::free_state(fpu_state());
-  assert (!in_ready_queue());
+  assert (!sched()->is_queued());
 }
 
 PUBLIC
 void
-Thread::alloc_sched_context()
+Thread::alloc_sched_constraints()
 {
   Budget_sc *bsc = Budget_sc::create(_quota);
   assert(bsc);
   bsc->inc_ref();
-  attach_sc(bsc);
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> C[addr:%p, cpu:%d]---BSC[%p]\n", this, cxx::int_value<Cpu_number>(this->home_cpu()), bsc);
+  sched()->attach(bsc);
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> C[addr:%p, cpu:%d]-SC[%p]-BSC[%p]\n", this, cxx::int_value<Cpu_number>(this->home_cpu()), sched(), bsc);
 }
 
 // IPC-gate deletion stuff ------------------------------------
@@ -478,7 +478,7 @@ Context::Drq::Result
 Thread::handle_kill_helper(Drq *src, Context *, void *)
 {
   Thread *to_delete = static_cast<Thread*>(static_cast<Kernel_drq*>(src)->src);
-  assert (!to_delete->in_ready_queue());
+  assert (!to_delete->sched()->is_queued());
   if (to_delete->dec_ref() == 0)
     delete to_delete;
 
@@ -524,8 +524,8 @@ Thread::do_kill()
     //if (sched() != sched_context())
     //  switch_sched(sched_context(), &rq);
 
-    if (!rq.current() || rq.current() == this)
-      rq.set_current(current());
+    if (!rq.current() || rq.current() == sched())
+      rq.set_current(current()->sched());
   }
 
   // if other threads want to send me IPC messages, abort these
@@ -575,7 +575,7 @@ Thread::do_kill()
 
   // dequeue from system queues
   //Sched_context::rq.current().ready_dequeue(sched());
-  Ready_queue::rq.current().ready_dequeue(this);
+  Ready_queue::rq.current().ready_dequeue(sched());
 
   if (_del_observer)
     {
@@ -588,16 +588,17 @@ Thread::do_kill()
   state_del_dirty(Thread_ready_mask);
 
   //Sched_context::rq.current().ready_dequeue(sched());
-  Ready_queue::rq.current().ready_dequeue(this);
+  Ready_queue::rq.current().ready_dequeue(sched());
 
   // make sure this thread really never runs again by migrating it
   // to the 'invalid' CPU forcefully and then switching to the kernel
   // thread for doing the last bits.
   force_to_invalid_cpu();
-  deactivate_sched_context();
-  migrate_sched_context_away();
-  if (is_blocked_on_sc())
-    get_blocked_on()->notify_blocked_detach(this);
+  sched()->deactivate();
+  // TOMO: only migrate away if we were the last thread the SC is attached to.
+  //sched()->migrate_away();
+  if (sched()->is_blocked())
+    sched()->blocked_by()->deblock(sched());
   kernel_context_drq(handle_kill_helper, 0);
   kdb_ke("I'm dead");
   return true;
@@ -638,7 +639,7 @@ Thread::kill()
     {
       prepare_kill();
       //Sched_context::rq.current().deblock(sched(), current()->sched());
-      Ready_queue::rq.current().deblock(this, current());
+      Ready_queue::rq.current().deblock(sched(), current()->sched());
       return true;
     }
 
@@ -763,15 +764,12 @@ Thread::start_migration()
 
   assert (!((Mword)m & 0x3)); // ensure alignment
 
-  if (!get_sched_context())
+  if (!sched()->is_constrained())
   {
-    panic("no sched_context (thread)");
+    panic("sched_context has no sched_constraints (thread)");
     if (M_SCHEDULER_DEBUG)
-    {
-      printf("SCHEDULER> trying to migrate thread %p which has no sched_context attached.\n", this);
-      printf("SCHEDULER> creating a new one...\n");
-    }
-    alloc_sched_context();
+      printf("SCHEDULER> trying to migrate thread %p whose sched_context has no sched_constraints attached.\n", this);
+    alloc_sched_constraints();
   }
 
   if (!m || !mp_cas(&_migration, m, (Migration*)0))
@@ -1285,10 +1283,10 @@ Thread::handle_remote_requests_irq()
   if (Ready_queue::rq.current().schedule_in_progress)
     {
       if (   (c->state() & Thread_ready_mask)
-          && !c->in_ready_queue()
+          && !c->sched()->is_queued()
           && on_current_cpu)
         //Sched_context::rq.current().ready_enqueue(c->sched());
-        Ready_queue::rq.current().ready_enqueue(c);
+        Ready_queue::rq.current().ready_enqueue(c->sched());
     }
   else if (resched)
     c->schedule();
@@ -1328,15 +1326,15 @@ Thread::migrate_away(Migration *inf, bool remote)
                       : Ready_queue::rq.cpu(home_cpu());
 
       // if we are in the middle of the scheduler, leave it now
-      if (rq.schedule_in_progress == this)
+      if (rq.schedule_in_progress == sched())
         rq.schedule_in_progress = 0;
 
-      rq.ready_dequeue(this);
+      rq.ready_dequeue(sched());
 
-      Context *csc = rq.current();
-      if (!remote && csc == this)
+      Sched_context *csc = rq.current();
+      if (!remote && csc == sched())
         {
-          rq.set_current(kernel_context(current_cpu()));
+          rq.set_current(kernel_context(current_cpu())->sched());
           resched = true;
         }
     }
@@ -1362,7 +1360,7 @@ Thread::migrate_away(Migration *inf, bool remote)
       // Reason: userspace should use the new SC API instead.
       //set_sched_param(inf->sp);
       //sc->get_quant_sc()->replenish();
-      migrate_sched_context_away();
+      sched()->migrate_away();
       //// TOMO: assumption about SC here!
       //Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
       //b->replenish();
@@ -1371,7 +1369,7 @@ Thread::migrate_away(Migration *inf, bool remote)
 
       Mem::mp_wmb();
 
-      assert (!in_ready_queue());
+      assert (!sched()->is_queued());
       assert (!_pending_rq.queued());
 
       // The migration must be finished on the new CPU core before executing any
@@ -1402,7 +1400,7 @@ Thread::migrate_to(Cpu_number target_cpu, bool /*remote*/)
           return false;
         }
 
-      migrate_sched_context_to(target_cpu);
+      sched()->migrate_to(target_cpu);
 
       // migrated meanwhile
       if (access_once(&_home_cpu) != target_cpu || _pending_rq.queued())
@@ -1413,7 +1411,7 @@ Thread::migrate_to(Cpu_number target_cpu, bool /*remote*/)
           g.reset();
           bool resched = handle_drq();
           //return resched | Sched_context::rq.current().deblock(sched(), current()->sched());
-          return resched | Ready_queue::rq.current().deblock(this, current());
+          return resched | Ready_queue::rq.current().deblock(sched(), current()->sched());
         }
 
       if (!_pending_rq.queued())

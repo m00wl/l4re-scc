@@ -50,7 +50,7 @@ App_cpu_thread::may_be_create(Cpu_number cpu, bool cpu_never_seen_before)
   Kernel_thread *t = new (Ram_quota::root) App_cpu_thread(Ram_quota::root);
   assert (t);
 
-  t->alloc_sched_context();
+  t->alloc_sched_constraints();
 
   t->set_home_cpu(cpu);
   t->set_current_cpu(cpu);
@@ -89,7 +89,7 @@ App_cpu_thread::bootstrap(Mword resume)
       kernel_context(ccpu, this);
       //Sched_context::set_kernel_sc(home_cpu(), sched());
       //Sched_context::rq.current().set_idle(this->sched());
-      Ready_queue::rq.current().set_idle(this);
+      Ready_queue::rq.current().set_idle(sched());
 
       Timer_tick::setup(ccpu);
     }
@@ -103,9 +103,9 @@ App_cpu_thread::bootstrap(Mword resume)
     //Sched_context::rq.current().set_current_sched(sched());
     //// TOMO: assumption about SC here!
     //static_cast<Budget_sc *>(get_sched_context())->calc_and_schedule_next_repl();
-    migrate_sched_context_to(ccpu);
-    activate_sched_context();
-    Ready_queue::rq.current().set_current(this);
+    sched()->migrate_to(ccpu);
+    sched()->activate();
+    Ready_queue::rq.current().set_current(sched());
   }
 
   if (!resume)

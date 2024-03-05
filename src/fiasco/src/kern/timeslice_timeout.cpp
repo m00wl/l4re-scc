@@ -34,7 +34,7 @@ Timeslice_timeout::expired() override
 {
   //Sched_context::Ready_queue &rq = Sched_context::rq.current();
   Ready_queue &rq { Ready_queue::rq.current() };
-  Context *current = rq.current();
+  Sched_context *current = rq.current();
 
   if (current)
   {

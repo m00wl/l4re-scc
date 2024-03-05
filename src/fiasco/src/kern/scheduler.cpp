@@ -86,7 +86,7 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
   static_assert(sizeof(L4_sched_param_legacy) <= sizeof(L4_sched_param),
                 "Adapt above check");
 
-  int ret = Context::check_sched_param(sched_param);
+  int ret = Sched_context::check_param(sched_param);
   if (EXPECT_FALSE(ret < 0))
     return commit_result(ret);
 
@@ -111,21 +111,18 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
            cxx::int_value<Order>(sched_param->cpus.granularity()));
 
   printf("\033[1;33mSCHEDULER> run_thread (Warning: Prio/Timeslice in L4_sched_param ignored, use SC API instead)\033[0m\n");
-  if (!thread->get_sched_context())
+  if (!thread->sched()->is_constrained())
   {
     printf("thread: %p\n", thread);
-    panic("no sched_context (scheduler)");
+    panic("sched_context has no sched_constraints (scheduler)");
     if (M_SCHEDULER_DEBUG)
-    {
-      printf("SCHEDULER> trying to run thread %p which has no sched_context attached.\n", thread);
-      printf("SCHEDULER> creating a new one...\n");
-    }
-    thread->alloc_sched_context();
+      printf("SCHEDULER> trying to run thread %p whose sched_context has no sched_constraints attached.\n", thread);
+    thread->alloc_sched_constraints();
   }
 
   // TOMO: what happens if attach_sc fails?
   if (_global_sc)
-    thread->attach_sc(_global_sc);
+    thread->sched()->attach(_global_sc);
 
   thread->migrate(&info);
 
@@ -177,8 +174,8 @@ Scheduler::sys_attach_sc(Syscall_frame *f, Utcb const *utcb)
   if (!sc)
     return tag;
 
-  thread->attach_sc(sc);
-  thread->print_sched_context();
+  thread->sched()->attach(sc);
+  thread->sched()->print();
 
   return commit_result(0);
 
@@ -209,8 +206,8 @@ Scheduler::sys_detach_sc(Syscall_frame *f, Utcb const *utcb)
   if (!sc)
     return tag;
 
-  thread->detach_sc(sc);
-  thread->print_sched_context();
+  thread->sched()->detach(sc);
+  thread->sched()->print();
 
   return commit_result(0);
 }
@@ -266,7 +263,7 @@ Scheduler::op_sched_info(L4_cpu_set_descr const &s, Mword *m, Mword *max_cpus,
 
   *m = rm;
   *max_cpus = Config::Max_num_cpus;
-  *sched_classes = Context::sched_classes();
+  *sched_classes = Sched_context::sched_classes();
 
   return commit_result(0);
 }

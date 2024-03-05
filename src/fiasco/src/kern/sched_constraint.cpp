@@ -1,9 +1,5 @@
-/*
- * Scheduling constraints as first-class citizens.
- */
-
 // --------------------------------------------------------------------------
-INTERFACE [sched_fcc]:
+INTERFACE:
 
 #include "member_offs.h"
 #include "types.h"
@@ -11,7 +7,9 @@ INTERFACE [sched_fcc]:
 #include "kobject.h"
 #include "ref_obj.h"
 
-class Context;
+#include "cxx/dlist"
+
+class Sched_context;
 
 class Sched_constraint
 : public cxx::Dyn_castable<Sched_constraint, Kobject>,
@@ -32,21 +30,8 @@ public:
   void set_run(bool r)
   { _run = r; }
 
-  Sched_constraint *get_next() const
-  { return _next; }
-
-  void set_next(Sched_constraint *sc)
-  { _next = sc; }
-
-  Context *get_blocked() const
-  { return _blocked; }
-
-  void clear_blocked()
-  { _blocked = nullptr; }
-
-  void set_blocked(Context *c);
-
-  void notify_blocked_detach(Context *c);
+  void block(Sched_context *scx);
+  void deblock(Sched_context *scx);
 
   virtual void deactivate() = 0;
   virtual void activate() = 0;
@@ -62,9 +47,9 @@ public:
 
 private:
   Ram_quota *_quota;
-  Sched_constraint *_next;
   bool _run;
-  Context *_blocked;
+  typedef cxx::Sd_list<Sched_context> Blocked_list;
+  Blocked_list _list;
 };
 
 class Quant_sc : public Sched_constraint
@@ -177,7 +162,7 @@ private:
 };
 
 // --------------------------------------------------------------------------
-IMPLEMENTATION [sched_fcc]:
+IMPLEMENTATION:
 
 #include <cassert>
 #include <cstddef>
@@ -201,7 +186,6 @@ Sched_constraint::operator new (size_t, void *b) throw()
 PUBLIC
 Sched_constraint::Sched_constraint(Ram_quota *q)
 : _quota(q),
-  _next(nullptr),
   _run(false)
 { printf("SC[%p]: created\n", this); }
 
@@ -215,43 +199,25 @@ Sched_constraint::~Sched_constraint()
 
 IMPLEMENT
 void
-Sched_constraint::set_blocked(Context *c)
+Sched_constraint::block(Sched_context *scx)
 {
-  assert(c);
-  assert(!c->is_blocked_on_sc());
-  assert(!c->get_next_blocked());
-  assert(!in_blocked_list(c));
+  assert(scx);
+  assert(!in_my_blocked_list(scx));
 
-  c->set_blocked_on(this);
-
-  if (!_blocked)
-  {
-    _blocked = c;
-    return;
-  }
-
-  Context *tail { _blocked };
-
-  while (tail->get_next_blocked())
-    tail = tail->get_next_blocked();
-
-  tail->set_next_blocked(c);
+  Ready_queue::rq.current().ready_dequeue(scx);
+  _list.push_back(scx);
 }
 
 PRIVATE
 bool
-Sched_constraint::in_blocked_list(Context *c)
+Sched_constraint::in_my_blocked_list(Sched_context *scx)
 {
-  assert(c);
+  assert(scx);
 
-  Context *i { _blocked };
-
-  while (i)
+  for (Sched_context *i : _list)
   {
-    if (c == i)
-     return true;
-
-    i = i->get_next_blocked();
+    if (scx == i)
+      return true;
   }
 
   return false;
@@ -259,68 +225,37 @@ Sched_constraint::in_blocked_list(Context *c)
 
 IMPLEMENT
 void
-Sched_constraint::notify_blocked_detach(Context *c)
+Sched_constraint::deblock(Sched_context *scx)
 {
-  assert(c);
-  assert(in_blocked_list(c));
+  assert(scx);
+  assert(in_my_blocked_list(scx));
 
-  if (c == _blocked)
-  {
-    _blocked = c->get_next_blocked();
-    c->set_blocked_on(nullptr);
-    c->set_next_blocked(nullptr);
-    return;
-  }
-
-  Context *pre { _blocked };
-
-  while (c != pre->get_next_blocked())
-    pre = pre->get_next_blocked();
-
-  pre->set_next_blocked(c->get_next_blocked());
-  c->set_blocked_on(nullptr);
-  c->set_next_blocked(nullptr);
+  _list.remove(scx);
 }
 
 PROTECTED
 void
 Sched_constraint::wake_up_all_blocked()
 {
-  Ready_queue &rq { Ready_queue::rq.current() };
-  //Context *current { ::current() };
-  Context *blocked { get_blocked() };
-  Context *next_blocked;
+  // TOMO: we want to requeue all blocked threads on THEIR home cpus
+  // maybe with drq to them?
+  //panic("wake_up_all_blocked() is tricky");
 
-  while (blocked)
+  Sched_context *scx;
+
+  while (!_list.empty())
   {
-    next_blocked = blocked->get_next_blocked();
-    blocked->set_blocked_on(nullptr);
-    blocked->set_next_blocked(nullptr);
+    scx = _list.front();
+    _list.remove(scx);
 
-    //if (blocked == current)
-    //{
-    //  printf("SC[%p]: requeing C[%p]\n", this, blocked);
-    //  rq.requeue(blocked);
-    //}
-    //else if (blocked->state() & Thread_ready_mask)
-    if (blocked->state() & Thread_ready_mask)
-    {
-      if (M_SCHEDULER_DEBUG) printf("SC[%p]: waking up C[%p]\n", this, blocked);
-      rq.ready_enqueue(blocked);
-    }
+    // TOMO:
+    // enqueue here somehow
+    // what about migration happening here in parallel?
 
-    blocked = next_blocked;
+    scx->reset_blocked();
+    Ready_queue::rq.current().ready_enqueue(scx);
   }
-
-  clear_blocked();
 }
-
-//PUBLIC static inline
-//Mword
-//Sched_constraint::sched_classes()
-//{
-//  return 1UL << (-L4_sched_param_fixed_prio::Class);
-//}
 
 PUBLIC
 void
@@ -362,7 +297,7 @@ sched_constraint_factory(Ram_quota *q, Space *, L4_msg_tag t, Utcb const *u,
       break;
   }
 
-  // TOMO: increase ref count here or does it happen automatically?
+  // TOMO: increase ref count here?
   return res;
 }
 
@@ -527,7 +462,7 @@ Budget_sc::period_expired()
 
   Context *curr { ::current() };
 
-  if (curr && curr->sched_context_contains(this))
+  if (curr && curr->sched()->contains(this))
   {
     _oob_timeout.reset();
     activate();
@@ -723,7 +658,7 @@ bool
 Timer_window_sc::Timer_window_sc_timeout::expired()
 {
   Unsigned64 now = Timer::system_clock();
-  if (M_SCHEDULER_DEBUG) printf("TWSC[%p]: timeout expired @ %llu\n", this, now);
+  if (M_SCHEDULER_DEBUG) printf("TWSC[%p]: timeout expired @ %llu\n", _sc, now);
   _sc->flip_state();
 
   // force reschedule.

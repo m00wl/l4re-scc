@@ -7,7 +7,7 @@ INTERFACE:
 
 #include <cxx/dlist>
 #include "per_cpu_data.h"
-#include "context.h"
+#include "sched_context.h"
 
 class Ready_queue
 {
@@ -16,105 +16,93 @@ public:
   static constexpr auto priorities { 256 };
   int _c = 0;
 
-  void enqueue(Context *, bool);
-  void dequeue(Context *);
-  Context *next_to_run() const;
+  void enqueue(Sched_context *, bool);
+  void dequeue(Sched_context *);
+  Sched_context *next_to_run() const;
 
-  void set_idle(Context *c) { c->_prio = Config::Kernel_prio; }
-  void activate(Context *c) { _current = c; }
-  Context *current() const { return _current; }
+  void set_idle(Sched_context *scx) { scx->_prio = Config::Kernel_prio; }
+  void activate(Sched_context *scx) { _current = scx; }
+  Sched_context *current() const { return _current; }
   void invalidate_current() { activate(nullptr); }
 
-  void set_current(Context *c);
-  bool deblock(Context *c, Context *current, bool lazy_q = false);
+  void set_current(Sched_context *);
+  bool deblock(Sched_context *, Sched_context *, bool = false);
 
-  void ready_enqueue(Context *c)
+  void ready_enqueue(Sched_context *scx)
   {
-    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[%p]: trying to enqueue C[%p]\n", this, c);
+    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[%p]: trying to enqueue SCX[%p]\n", this, scx);
     assert(cpu_lock.test());
-    assert(c->get_sched_context());
+    // TOMO: maybe we don't need this?
+    assert(scx->is_constrained());
 
     // Don't enqueue threads which are already enqueued
-    if (EXPECT_FALSE (c->in_ready_queue()))
+    if (EXPECT_FALSE (scx->is_queued()))
       return;
 
-    enqueue(c, true);
+    enqueue(scx, true);
   }
 
-  void ready_dequeue(Context *c)
+  void ready_dequeue(Sched_context *scx)
   {
-    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[%p]: trying to dequeue C[%p]\n", this, c);
-    assert (cpu_lock.test());
+    if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[%p]: trying to dequeue SCX[%p]\n", this, scx);
+    assert(cpu_lock.test());
 
     // Don't dequeue threads which aren't enqueued
-    if (EXPECT_FALSE (!c->in_ready_queue()))
+    if (EXPECT_FALSE (!scx->is_queued()))
       return;
 
-    dequeue(c);
+    dequeue(scx);
   }
 
-  //void switch_sched(Context *from, Context *to)
-  //{
-  //  assert (cpu_lock.test());
-
-  //  // If we're leaving the global timeslice, invalidate it This causes
-  //  // schedule() to select a new timeslice via set_current_sched()
-  //  if (from == current())
-  //    invalidate_current();
-
-  //  if (from->in_ready_queue())
-  //    dequeue(from);
-
-  //  enqueue(to, false);
-  //}
-
-  Context *schedule_in_progress;
+  Sched_context *schedule_in_progress;
 
 private:
-    typedef cxx::Sd_list<Context> Queue;
+    typedef cxx::Sd_list<Sched_context> Queue;
     Unsigned8 prio_highest { 0 };
     Queue queue[priorities];
 
-    Context *_current;
+    Sched_context *_current;
 };
 
 // --------------------------------------------------------------------------
 IMPLEMENTATION:
 
-#include "panic.h"
-#include <cassert>
 #include "cpu_lock.h"
+#include "panic.h"
 #include "std_macros.h"
+#include "logdefs.h"
+
+#include <cassert>
 
 DEFINE_PER_CPU Per_cpu<Ready_queue> Ready_queue::rq;
 
 IMPLEMENT inline
-Context *
+Sched_context *
 Ready_queue::next_to_run() const
 { return queue[prio_highest].front(); }
 
 /**
- * Enqueue context in ready-list.
+ * Enqueue sched_context in ready-list.
  */
 IMPLEMENT
 void
-Ready_queue::enqueue(Context *c, bool is_current)
+Ready_queue::enqueue(Sched_context *scx, bool is_current)
 {
   assert(cpu_lock.test());
 
   // Don't enqueue threads which are already enqueued
-  if (EXPECT_FALSE (c->in_ready_queue()))
+  if (EXPECT_FALSE (scx->is_queued()))
     return;
 
-  Unsigned8 prio = c->get_prio();
+  Unsigned8 prio = scx->prio();
 
   if (prio > prio_highest)
     prio_highest = prio;
 
-  queue[prio].push(c, is_current? Queue::Front : Queue::Back);
+  queue[prio].push(scx, is_current? Queue::Front : Queue::Back);
 
   _c++;
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[addr: %p, entries: %d]: enqueue C[%p]\n", this, _c, c);
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[addr: %p, entries: %d]: enqueue SCX[%p]\n", this, _c, scx);
 }
 
 /**
@@ -122,53 +110,53 @@ Ready_queue::enqueue(Context *c, bool is_current)
  */
 IMPLEMENT inline NEEDS ["cpu_lock.h", <cassert>, "std_macros.h"]
 void
-Ready_queue::dequeue(Context *c)
+Ready_queue::dequeue(Sched_context *scx)
 {
   assert (cpu_lock.test());
 
   // Don't dequeue threads which aren't enqueued
-  if (EXPECT_FALSE (!c->in_ready_queue()))
+  if (EXPECT_FALSE (!scx->is_queued()))
     return;
 
-  Unsigned8 prio = c->get_prio();
+  Unsigned8 prio = scx->prio();
 
-  queue[prio].remove(c);
+  queue[prio].remove(scx);
 
   while (queue[prio_highest].empty() && prio_highest)
     prio_highest--;
   _c--;
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[addr: %p, entries: %d]: dequeue C[%p]\n", this, _c, c);
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[addr: %p, entries: %d]: dequeue SCX[%p]\n", this, _c, scx);
 }
       
       
 PUBLIC inline
 void
-Ready_queue::requeue(Context *c)
+Ready_queue::requeue(Sched_context *scx)
 {
-  if (!c->in_ready_queue())
-    enqueue(c, false);
+  if (!scx->is_queued())
+    enqueue(scx, false);
   else
-    queue[c->get_prio()].rotate_to(*++Queue::iter(c));
+    queue[scx->prio()].rotate_to(*++Queue::iter(scx));
 }
       
 PUBLIC inline
 void
-Ready_queue::deblock_refill(Context *)
+Ready_queue::deblock_refill(Sched_context *)
 {}
 
 /**
- * Set currently active global Context.
+ * Set currently active global Sched_context.
  */
 IMPLEMENT
 void
-Ready_queue::set_current(Context *c)
+Ready_queue::set_current(Sched_context *scx)
 {
-  assert (c);
+  assert(scx);
   //// Save remainder of previous timeslice or refresh it, unless it had
   //// been invalidated
   //Timeout * const tt = timeslice_timeout.current();
   //Unsigned64 clock = Timer::system_clock();
-  //if (Context *s = current())
+  //if (Sched_context *s = current())
   //{
   //  Signed64 left = tt->get_timeout(clock);
   //  if (left > 0)
@@ -193,9 +181,9 @@ Ready_queue::set_current(Context *c)
   //tt->set(clock + static_cast<Budget_sc *>(c->get_sched_context())->get_left(), current_cpu());
 
   // Make this timeslice current
-  activate(c);
+  activate(scx);
 
-  LOG_SCHED_LOAD(c);
+  LOG_SCHED_LOAD(scx);
 }
 
 /**
@@ -209,8 +197,8 @@ Ready_queue::set_current(Context *c)
  * scheduling context via `switch_to_locked()`. This is required to ensure that
  * the scheduler does not forget about the scheduling context.
  *
- * \param c       Context that shall be deblocked.
- * \param current Context of the currently running context.
+ * \param c       Sched_context that shall be deblocked.
+ * \param current Sched_context of the currently running context.
  * \param lazy_q  Queue lazily if applicable.
  *
  * \returns Whether a reschedule is necessary (deblocked scheduling context
@@ -218,29 +206,30 @@ Ready_queue::set_current(Context *c)
  */
 IMPLEMENT inline NEEDS[<cassert>]
 bool
-Ready_queue::deblock(Context *c, Context *current, bool lazy_q)
+Ready_queue::deblock(Sched_context *scx, Sched_context *current, bool lazy_q)
 {
   assert(cpu_lock.test());
 
-  Context *cs = this->current();
+  Sched_context *rq_current = this->current();
   bool res = true;
-  if (c == cs)
+  if (scx == rq_current)
   {
-    if (current && current->dominates(c))
+    if (current && current->dominates(scx))
       res = false;
   }
   else
   {
-    deblock_refill(c);
+    deblock_refill(scx);
 
-    if ((EXPECT_TRUE(cs != 0) && cs->dominates(c))
-        || (current && current->dominates(c)))
+    if ((EXPECT_TRUE(rq_current != 0) && rq_current->dominates(scx))
+        || (current && current->dominates(scx)))
       res = false;
   }
 
   if (res && lazy_q)
     return true;
 
-  ready_enqueue(c);
+  ready_enqueue(scx);
   return res;
 }
+

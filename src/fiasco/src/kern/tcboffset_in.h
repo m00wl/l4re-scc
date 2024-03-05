@@ -1,10 +1,8 @@
   DUMP_MEMBER1 (THREAD, Context, _state,		STATE)
   DUMP_MEMBER1 (THREAD, Context, _kernel_sp,		KERNEL_SP)
   DUMP_MEMBER1 (THREAD, Context, _lock_cnt,		LOCK_CNT)
-#if 0
-  DUMP_MEMBER1 (THREAD, Context, _sched,		SCHED)
-#endif
-  DUMP_MEMBER1 (THREAD, Context, _sched_context,	SCHED_COND)
+  DUMP_MEMBER1 (THREAD, Context, _scx,		SCX)
+  DUMP_MEMBER1 (THREAD, Context, _current_scx,	SCX)
   DUMP_MEMBER1 (THREAD, Context, _fpu_state,		FPU_STATE)
   DUMP_MEMBER1 (THREAD, Context, _consumed_time,	CONSUMED_TIME)
   DUMP_MEMBER1 (THREAD, Thread, _caller,		REPLY_CAP)

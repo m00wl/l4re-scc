@@ -343,7 +343,7 @@ Thread::check_sender(Thread *sender, bool timeout)
   // idea: do_ipc (with partner) is always initiated from the sender
   // means: we always run with the sender's sched context.
   // means: we can take prio and stuff from SC_Scheduler::get_current.
-  sender->sender_enqueue(sender_list(), sender->get_prio());
+  sender->sender_enqueue(sender_list(), sender->sched()->prio());
   //sender->sender_enqueue(sender_list(), SC_Scheduler::get_current()->prio());
   vcpu_set_irq_pending();
   return Check_sender::Queued;
@@ -498,8 +498,8 @@ Thread::activate_ipc_partner(Thread *partner, Cpu_number current_cpu,
     //Sched_context *cs = SC_Scheduler::get_current();
     Ready_queue &rq { Ready_queue::rq.current() };
     //Sched_context *cs = rq.current_sched();
-    Context *cs = rq.current();
-    do_switch = do_switch && (closed_wait || cs != this);
+    Sched_context *cs = rq.current();
+    do_switch = do_switch && (closed_wait || cs != sched());
     partner->state_change_dirty(~Thread_ipc_transfer, Thread_ready);
     // TOMO: we disable the direct switch via switch_exec_locked,
     //       because this would not set ready_queue::current.
@@ -1280,7 +1280,7 @@ Thread::remote_ipc_send(Ipc_remote_request *rq)
   if (rq->partner->home_cpu() == current_cpu() && current() != rq->partner)
     //Sched_context::rq.current().ready_enqueue(rq->partner->sched());
     //Ready_queue::rq.current().ready_enqueue(rq->partner->sched());
-    Ready_queue::rq.current().ready_enqueue(rq->partner);
+    Ready_queue::rq.current().ready_enqueue(rq->partner->sched());
 
   return true;
 }

@@ -20,6 +20,7 @@ INTERFACE:
 #include <fiasco_defs.h>
 #include <cxx/function>
 #include "ready_queue_fp.h"
+#include "sched_context.h"
 
 class Entry_frame;
 class Context;
@@ -103,7 +104,6 @@ public:
  */
 class Context :
   public Context_base,
-  public cxx::D_list_item,
   protected Rcu_item
 {
   MEMBER_OFFSET();
@@ -322,19 +322,8 @@ private:
   int _lock_cnt;
 
   // The scheduling parameters.
-  friend class Ready_queue;
-  Unsigned8 _prio;
-  Sched_constraint *_sched_context;
-  Sched_constraint *_blocked_on;
-  Context *_next_blocked;
-
-  union Sched_param
-  {
-    L4_sched_param p;
-    L4_sched_param_legacy legacy_fixed_prio;
-    L4_sched_param_fixed_prio fixed_prio;
-  };
-
+  Sched_context _scx;
+  Sched_context *_current_scx;
 
   // Pointer to floating point register state
   Fpu_state _fpu_state;
@@ -487,10 +476,8 @@ Context::Context()
   // something different.
   _helper(this),
   //_sched_context(this),
-  _prio(Config::Default_prio),
-  _sched_context(nullptr),
-  _blocked_on(nullptr),
-  _next_blocked(nullptr)
+  _scx(),
+  _current_scx(&_scx)
 {
   _home_cpu = Cpu::invalid();
   printf("C[%p]: created\n", this);
@@ -797,16 +784,15 @@ Context::schedule()
   // Select a thread for scheduling.
   Context *next_to_run;
 
-  assert(!is_blocked_on_sc());
   for (;;)
     {
-      next_to_run = rq->next_to_run();
+      next_to_run = rq->next_to_run()->context();
 
       // Ensure ready-list sanity
       assert (next_to_run);
 
       if (EXPECT_FALSE(!(next_to_run->state() & Thread_ready_mask)))
-        rq->ready_dequeue(next_to_run);
+        rq->ready_dequeue(next_to_run->sched());
       else switch (schedule_switch_to_locked(next_to_run))
         {
         default:
@@ -825,7 +811,7 @@ Context::schedule()
           continue; // may have been migrated...
         }
 
-      rq->schedule_in_progress = this;
+      rq->schedule_in_progress = sched();
       Proc::preemption_point();
       if (EXPECT_TRUE(current_cpu == ::current_cpu()))
         rq->schedule_in_progress = 0;
@@ -848,100 +834,56 @@ Context::schedule_if(bool s)
   schedule();
 }
 
-///**
-// * Return Context's Sched_context with id 'id'; return time slice 0 as default.
-// * @return Sched_context with id 'id' or 0
-// */
-//PUBLIC inline
-//Sched_context *
-//Context::sched_context(unsigned short const id = 0) const
-//{
-//  if (EXPECT_TRUE (!id))
-//    return const_cast<Sched_context*>(&_sched_context);
-//  return 0;
-//}
-
-///**
-// * Return Context's currently active Sched_context.
-// * @return Active Sched_context
-// */
-//PUBLIC inline
-//Prio_sc *
-//Context::sched() const
-//{
-//  return _sched;
-//}
-
-///**
-// * Set Context's currently active Sched_context.
-// * @param sched Sched_context to be activated
-// */
-//PUBLIC inline
-//void
-//Context::set_sched(Prio_sc * const sched)
-//{
-//  _sched = sched;
-//}
-
-
 // Scheduling functions.
 
-PUBLIC
-Unsigned8
-Context::get_prio() const
-{ return _prio; }
+/**
+ * Return Context's Sched_context
+ * @return Sched_context
+ */
+PUBLIC inline
+Sched_context *
+Context::sched_context() const
+{
+  return const_cast<Sched_context *>(&_scx);
+}
+
+/**
+ * Return Context's currently active Sched_context.
+ * @return Active Sched_context
+ */
+PUBLIC inline
+Sched_context *
+Context::sched() const
+{
+  return _current_scx;
+}
+
+/**
+ * Set Context's currently active Sched_context.
+ * @param sched Sched_context to be activated
+ */
+PUBLIC inline
+void
+Context::set_sched(Sched_context * const scx)
+{
+  _current_scx = scx;
+}
 
 PUBLIC
 void
 Context::change_prio_to(Unsigned8 p)
 {
-  bool do_rq = in_ready_queue();
+  bool do_rq = sched()->is_queued();
 
   if (do_rq)
-    Ready_queue::rq.cpu(home_cpu()).ready_dequeue(this);
+    Ready_queue::rq.cpu(home_cpu()).ready_dequeue(sched());
 
-  _prio = p;
+  sched()->_prio = p;
 
   if (do_rq)
-    Ready_queue::rq.cpu(home_cpu()).ready_enqueue(this);
+    Ready_queue::rq.cpu(home_cpu()).ready_enqueue(sched());
 }
 
-PUBLIC
-Sched_constraint *
-Context::get_blocked_on() const
-{ return _blocked_on; }
-
-PUBLIC
-void
-Context::set_blocked_on(Sched_constraint *sc)
-{ _blocked_on = sc; }
-
-PUBLIC
-bool
-Context::is_blocked_on_sc() const
-{ return (_blocked_on != nullptr); }
-
-PUBLIC
-Context *
-Context::get_next_blocked() const
-{ return _next_blocked; }
-
-PUBLIC
-void
-Context::set_next_blocked(Context *c)
-{ _next_blocked = c; }
-
-PUBLIC
-Sched_constraint *
-Context::get_sched_context() const
-{ return _sched_context; }
-
-//PUBLIC
-//void
-//Context::set_sched_context(Sched_constraint *sc)
-//{ _sched_context = sc; }
-
-// TOMO: accounting should ideally happen before the next sched_context is selected.
 PUBLIC
 void
 Context::switch_sched_context(Context *to)
@@ -963,297 +905,9 @@ Context::switch_sched_context(Context *to)
   // The old thread might have had a helper and might run with their
   // scheduling context.
   // Be sure to deactivate the correct scheduling context here.
-  from->deactivate_sched_context();
-  to->activate_sched_context();
+  from->sched()->deactivate();
+  to->sched()->activate();
 }
-
-PROTECTED
-bool
-Context::sched_context_is_ok()
-{ return is_blocked_on_sc() ? false : sched_context_can_run(); }
-
-PRIVATE
-bool
-Context::sched_context_can_run()
-{
-  // TOMO: we could maybe relax this here.
-  // threads can be in the ready although they don't have *any* constraint attached to them.
-  // in this case, sched_context can NOT run (obviously), but we also don't need to block on anything.
-  // we rely on the userspace to attach an SC eventually?
-  assert(_sched_context);
-  assert(!is_blocked_on_sc());
-  // TOMO: should probably lock this.
-  Sched_constraint *sc { _sched_context };
-
-  while (sc)
-  {
-    if (!sc->can_run())
-    {
-      if (M_SCHEDULER_DEBUG) printf("C[%p] blocking on SC[%p]\n", this, sc);
-      sc->set_blocked(this);
-      return false;
-    }
-    sc = sc->get_next();
-  }
-
-  return true;
-}
-
-PUBLIC
-void
-Context::deactivate_sched_context()
-{
-  Sched_constraint *sc { _sched_context };
-
-  while (sc)
-  {
-    sc->deactivate();
-    sc = sc->get_next();
-  }
-}
-
-PUBLIC
-void
-Context::activate_sched_context()
-{
-  Sched_constraint *sc { _sched_context };
-
-  while (sc)
-  {
-    sc->activate();
-    sc = sc->get_next();
-  }
-}
-
-PUBLIC
-void
-Context::migrate_sched_context_away()
-{
-  Sched_constraint *sc { _sched_context };
-
-  while (sc)
-  {
-    sc->migrate_away();
-    sc = sc->get_next();
-  }
-}
-
-PUBLIC
-void
-Context::migrate_sched_context_to(Cpu_number target)
-{
-  Sched_constraint *sc { _sched_context };
-
-  while (sc)
-  {
-    sc->migrate_to(target);
-    sc = sc->get_next();
-  }
-}
-
-PROTECTED
-void
-Context::clear_sched_context()
-{
-  // TOMO: should probably lock this.
-  Sched_constraint *sc { _sched_context };
-  _sched_context = nullptr;
-
-  while (sc)
-  {
-    sc->dec_ref();
-    sc = sc->get_next();
-  }
-}
-
-PUBLIC
-bool
-Context::sched_context_contains(Sched_constraint *sc)
-{
-  Sched_constraint *i { _sched_context };
-
-  while (i)
-  {
-    if (i == sc)
-      return true;
-    i = i->get_next();
-  }
-
-  return false;
-}
-
-PUBLIC
-void
-Context::print_sched_context()
-{
-  Sched_constraint *sc { _sched_context };
-
-  printf("C[%p]:", this);
-  while (sc)
-  {
-    printf("---SC[%p]", sc);
-    sc = sc->get_next();
-  }
-  printf(">\n");
-}
-
-PUBLIC
-void
-Context::attach_sc(Sched_constraint *sc)
-{
-  assert(sc);
-  assert(!sc->get_next());
-
-  if (!_sched_context)
-  {
-    _sched_context = sc;
-    sc->inc_ref();
-    return;
-  }
-
-  Sched_constraint *tail { _sched_context };
-
-  while (tail->get_next())
-    tail = tail->get_next();
-
-  tail->set_next(sc);
-  sc->inc_ref();
-}
-
-PUBLIC
-void
-Context::detach_sc(Sched_constraint *sc)
-{
-  assert(sc);
-
-  Sched_constraint *pre { nullptr };
-  Sched_constraint *cur { _sched_context };
-
-  if (!cur)
-    return; // no sched_context
-
-  if (cur == sc)
-    _sched_context = cur->get_next();
-  else
-  {
-    while (cur && cur != sc)
-    {
-      pre = cur;
-      cur = cur->get_next();
-    }
-
-    if (!cur)
-      return; // sc was not in sched_context
-
-    pre->set_next(cur->get_next());
-  }
-
-  sc->dec_ref();
-
-  // if sc is attached to no other contexts, remove it from any sc queues
-  if (sc->ref_cnt() == 0)
-    sc->set_next(nullptr);
-
-  if (_blocked_on == sc)
-  {
-    sc->notify_blocked_detach(this);
-    Ready_queue::rq.current().ready_enqueue(this);
-  }
-}
-
-PUBLIC
-bool
-Context::in_ready_queue() const
-{ return cxx::Sd_list<Context>::in_list(this); }
-
-PUBLIC
-bool
-Context::dominates(Context *c) const
-{ return _prio > c->get_prio(); }
-
-PUBLIC static inline
-Mword
-Context::sched_classes()
-{
-  return 1UL << (-L4_sched_param_fixed_prio::Class);
-}
-
-PUBLIC static inline
-int
-Context::check_sched_param(L4_sched_param const *_p)
-{
-  Sched_param const *p = reinterpret_cast<Sched_param const *>(_p);
-  switch (p->p.sched_class)
-  {
-    case L4_sched_param_fixed_prio::Class:
-      if (!_p->check_length<L4_sched_param_fixed_prio>())
-        return -L4_err::EInval;
-      break;
-
-    default:
-      if (!_p->is_legacy())
-        return -L4_err::ERange;
-      break;
-  }
-
-  return 0;
-}
-
-//PUBLIC
-//void
-//Context::set_sched_param(L4_sched_param const *_p)
-//{
-//  printf("old prio: %d\n", _prio);
-//  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> Context[%p]: set_sched_param\n", this);
-//  Sched_param const *p = reinterpret_cast<Sched_param const *>(_p);
-//  // TOMO: assumption about SC here!
-//  Budget_sc *b = static_cast<Budget_sc *>(get_sched_context());
-//  printf("old budget: %llu\n", b->get_budget());
-//  if (_p->is_legacy())
-//  {
-//    // legacy fixed prio
-//    _prio = p->legacy_fixed_prio.prio;
-//    if (p->legacy_fixed_prio.prio > 255)
-//      _prio = 255;
-//    printf("prio: %d\n", _prio);
-//
-//    // TOMO: assumption about SC here!
-//    //get_quant_sc()->set_quantum(p->legacy_fixed_prio.quantum);
-//    //get_budget_sc()->set_budget(p->legacy_fixed_prio.quantum);
-//    b->set_budget(p->legacy_fixed_prio.quantum);
-//    if (p->legacy_fixed_prio.quantum == 0)
-//      //get_quant_sc()->set_quantum(Config::Default_time_slice);
-//      //get_budget_sc()->set_budget(Config::Default_time_slice);
-//      b->set_budget(Config::Default_time_slice);
-//    printf("budget: %llu\n", b->get_budget());
-//    return;
-//  }
-//
-//  switch (p->p.sched_class)
-//  {
-//    case L4_sched_param_fixed_prio::Class:
-//      _prio = p->fixed_prio.prio;
-//      if (p->fixed_prio.prio > 255)
-//        _prio = 255;
-//      printf("prio: %d\n", _prio);
-//
-//      // TOMO: assumption about SC here!
-//      //get_quant_sc()->set_quantum(p->fixed_prio.quantum);
-//      //get_budget_sc()->set_budget(p->fixed_prio.quantum);
-//      b->set_budget(p->fixed_prio.quantum);
-//      if (p->fixed_prio.quantum == 0)
-//        //get_quant_sc()->set_quantum(Config::Default_time_slice);
-//        //get_budget_sc()->set_budget(Config::Default_time_slice);
-//        b->set_budget(Config::Default_time_slice);
-//      printf("budget: %llu\n", b->get_budget());
-//      break;
-//
-//    default:
-//      assert(false && "Missing check_param()?");
-//      break;
-//  }
-//}
-
 
 // queue operations
 
@@ -1276,7 +930,7 @@ Context::update_ready_list()
   //  //Sched_context::rq.current().ready_enqueue(sched());
   //  Ready_queue::rq.current().ready_enqueue(this);
   if (state() & Thread_ready_mask)
-    Ready_queue::rq.current().ready_enqueue(this);
+    Ready_queue::rq.current().ready_enqueue(sched());
 }
 
 ///**
@@ -1409,8 +1063,8 @@ Context::schedule_switch_to_locked(Context *t)
   //Sched_context::Ready_queue &rq = Sched_context::rq.current();
   Ready_queue &rq { Ready_queue::rq.current() };
   // Switch to destination thread's scheduling context
-  if (rq.current() != t)
-    rq.set_current(t);
+  if (rq.current() != t->sched())
+    rq.set_current(t->sched());
 
   if (EXPECT_FALSE(t == this))
   {
@@ -1436,7 +1090,7 @@ Context::deblock_and_schedule(Context *to)
   //(void)to;
   //panic("c: deblock_and_schedule not available\n");
   //if (Sched_context::rq.current().deblock(to->sched(), sched(), true))
-  if (Ready_queue::rq.current().deblock(to, this, true))
+  if (Ready_queue::rq.current().deblock(to->sched(), sched(), true))
     {
       switch_to_locked(to);
       return true;
@@ -1486,9 +1140,9 @@ Context::switch_exec_locked(Context *t, enum Helping_mode mode = Not_Helping)
 
   if (EXPECT_FALSE(t->running_on_different_cpu()))
     {
-      if (!t->in_ready_queue())
+      if (!t->sched()->is_queued())
         //Sched_context::rq.current().ready_enqueue(t->sched());
-        Ready_queue::rq.current().ready_enqueue(t);
+        Ready_queue::rq.current().ready_enqueue(t->sched());
       return Switch::Failed;
     }
 
@@ -1505,11 +1159,8 @@ Context::switch_exec_locked(Context *t, enum Helping_mode mode = Not_Helping)
     }
 
   // Can only switch to threads with valid sched_context.
-  if (EXPECT_FALSE(!(t->sched_context_is_ok())))
-    {
-      Ready_queue::rq.current().ready_dequeue(t);
-      return Switch::Failed;
-    }
+  if (EXPECT_FALSE(!(t->sched()->can_run())))
+    return Switch::Failed;
 
   // Ensure kernel stack pointer is non-null if thread is ready
   assert (t->_kernel_sp);
@@ -1844,7 +1495,7 @@ Context::xcpu_state_change(Mword mask, Mword add, bool lazy_q = false)
   state_change_dirty(mask, add);
   if (add & Thread_ready_mask)
     //return Sched_context::rq.current().deblock(sched(), current()->sched(), lazy_q);
-    return Ready_queue::rq.current().deblock(this, current(), lazy_q);
+    return Ready_queue::rq.current().deblock(sched(), current()->sched(), lazy_q);
   return false;
 }
 
@@ -2362,12 +2013,12 @@ Context::Pending_rqq::handle_requests(Context **mq)
 
       if (EXPECT_TRUE(c != curr && (c->state() & Thread_ready_mask)))
         {
-          Context *cs = (curr->home_cpu() == curr->get_current_cpu())
-                            ? curr
+          Sched_context *cs = (curr->home_cpu() == curr->get_current_cpu())
+                            ? curr->sched()
                             : 0;
 
           //resched |= Sched_context::rq.current().deblock(c->sched(), cs);
-          resched |= Ready_queue::rq.current().deblock(c, cs);
+          resched |= Ready_queue::rq.current().deblock(c->sched(), cs);
         }
     }
 }
@@ -2481,14 +2132,14 @@ Context::_execute_drq(Drq *rq, bool offline_cpu = false)
   if (EXPECT_FALSE(!offline_cpu && home_cpu() != current_cpu()))
     return false;
 
-  if (!in_ready_queue() && (state(false) & Thread_ready_mask))
+  if (!sched()->is_queued() && (state(false) & Thread_ready_mask))
     {
       if (EXPECT_FALSE(offline_cpu))
         //Sched_context::rq.cpu(home_cpu()).ready_enqueue(sched());
-        Ready_queue::rq.cpu(home_cpu()).ready_enqueue(this);
+        Ready_queue::rq.cpu(home_cpu()).ready_enqueue(sched());
       else
         //Sched_context::rq.current().ready_enqueue(sched());
-        Ready_queue::rq.current().ready_enqueue(this);
+        Ready_queue::rq.current().ready_enqueue(sched());
 
       return true;
     }

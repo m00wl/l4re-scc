@@ -84,10 +84,10 @@ Kernel_thread::bootstrap()
 
   Timer::init_system_clock();
   //Sched_context::rq.current().set_idle(this->sched());
-  alloc_sched_context();
-  print_sched_context();
-  migrate_sched_context_to(current_cpu());
-  activate_sched_context();
+  alloc_sched_constraints();
+  sched()->print();
+  sched()->migrate_to(current_cpu());
+  sched()->activate();
   //// TOMO: assumption about SC here!
   //static_cast<Budget_sc *>(get_sched_context())->calc_and_schedule_next_repl();
   //Ready_queue::rq.current().set_idle(this->sched());
@@ -97,7 +97,7 @@ Kernel_thread::bootstrap()
   // Setup initial timeslice
   //Sched_context::rq.current().set_current_sched(sched());
   //SC_Scheduler::set_current(Sched_context::get_kernel_sc());
-  Ready_queue::rq.current().set_current(this);
+  Ready_queue::rq.current().set_current(sched());
 
   Timer_tick::setup(current_cpu());
   assert (current_cpu() == Cpu_number::boot_cpu()); // currently the boot cpu must be 0

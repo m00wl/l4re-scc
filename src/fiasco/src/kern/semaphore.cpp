@@ -121,8 +121,6 @@ PRIVATE inline NOEXPORT ALWAYS_INLINE
 bool
 Semaphore::down(Thread *ct)
 {
-  //(void)ct;
-  //panic("Semaphore::down: sc not available here\n");
   bool run = true;
     {
       auto g = lock_guard(_waiting.lock());
@@ -136,7 +134,7 @@ Semaphore::down(Thread *ct)
           ct->state_change_dirty(~Thread_ready, Thread_receive_wait);
           ct->set_wait_queue(&_waiting);
           //ct->sender_enqueue(&_waiting, ct->sched()->get_prio());
-          ct->sender_enqueue(&_waiting, ct->get_prio());
+          ct->sender_enqueue(&_waiting, ct->sched()->prio());
         }
       else
         --_queued;
