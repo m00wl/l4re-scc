@@ -2,7 +2,7 @@
   DUMP_MEMBER1 (THREAD, Context, _kernel_sp,		KERNEL_SP)
   DUMP_MEMBER1 (THREAD, Context, _lock_cnt,		LOCK_CNT)
   DUMP_MEMBER1 (THREAD, Context, _scx,		SCX)
-  DUMP_MEMBER1 (THREAD, Context, _current_scx,	SCX)
+  DUMP_MEMBER1 (THREAD, Context, _current_scx,	CSCX)
   DUMP_MEMBER1 (THREAD, Context, _fpu_state,		FPU_STATE)
   DUMP_MEMBER1 (THREAD, Context, _consumed_time,	CONSUMED_TIME)
   DUMP_MEMBER1 (THREAD, Thread, _caller,		REPLY_CAP)

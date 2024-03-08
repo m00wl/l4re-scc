@@ -174,7 +174,8 @@ Scheduler::sys_attach_sc(Syscall_frame *f, Utcb const *utcb)
   if (!sc)
     return tag;
 
-  thread->sched()->attach(sc);
+  if (!thread->sched()->attach(sc))
+    return commit_result(-L4_err::ENomem);
   thread->sched()->print();
 
   return commit_result(0);
@@ -206,7 +207,8 @@ Scheduler::sys_detach_sc(Syscall_frame *f, Utcb const *utcb)
   if (!sc)
     return tag;
 
-  thread->sched()->detach(sc);
+  if (!thread->sched()->detach(sc))
+    return commit_result(-L4_err::ENoent);
   thread->sched()->print();
 
   return commit_result(0);
