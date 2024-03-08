@@ -301,6 +301,14 @@ config UX_NET
 #
 #endchoice
 
+config SCX_MAX_SC
+	int "Maximal number of SCs per Thread"
+	range 1 16
+	default 4
+	help
+	  The maximum number of scheduling-constraints that can be attached to a
+	  thread.
+
 config IOMMU
 	bool "Enable support for DMA remapping" if HAS_IOMMU_OPTION
 	depends on HAS_IOMMU_OPTION

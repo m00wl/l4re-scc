@@ -104,6 +104,7 @@ public:
 #else
     Big_endian = false,
 #endif
+    Scx_max_sc = CONFIG_SCX_MAX_SC,
   };
 
   static Cpu_number max_num_cpus() { return Cpu_number(Max_num_cpus); }

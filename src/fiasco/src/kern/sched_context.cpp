@@ -12,8 +12,6 @@ INTERFACE:
 
 class Sched_constraint;
 
-static constexpr auto SIZE = 4;
-
 class Sched_context : public cxx::D_list_item
 {
   MEMBER_OFFSET();
@@ -47,7 +45,7 @@ public:
 private:
   Unsigned8 _prio;
   Spin_lock<> _lock;
-  Sched_constraint *__scs[SIZE] = { nullptr };
+  Sched_constraint *__scs[Config::Scx_max_sc] = { nullptr };
   typedef cxx::static_vector<Sched_constraint *, unsigned> Sc_list;
   Sc_list _list;
   Sched_constraint *_blocked_by;
@@ -71,7 +69,7 @@ PUBLIC
 Sched_context::Sched_context()
 : _prio(Config::Default_prio),
   _lock(Spin_lock<>::Unlocked),
-  _list(&__scs[0], SIZE),
+  _list(&__scs[0], Config::Scx_max_sc),
   _blocked_by(nullptr)
 {}
 
