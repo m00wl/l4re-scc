@@ -189,6 +189,7 @@ IMPLEMENTATION:
 #include "context.h"
 #include "ready_queue.h"
 #include "minmax.h"
+#include "thread_object.h"
 
 PUBLIC inline NEEDS[<cstddef>]
 void *
@@ -474,8 +475,14 @@ void
 Budget_sc::timeslice_expired()
 {
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> BSC[%p]: timeslice_expired\n", this);
-  set_left(0);
+  printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>> BSC[%p]: deadline hit @ %llu\n", this, Timer::system_clock());
   set_run(false);
+  // TOMO: send exception to user thread here
+  Thread *t = ::current_thread();
+  //extern char leave_by_trigger_exception[];
+  //t->do_trigger_exception(t->regs(), leave_by_trigger_exception);
+  //t->send_exception(t->regs());
+  static_cast<Thread_object *>(t)->ex_regs(~0UL, ~0UL, 0, 0, 0, Thread::Exr_trigger_exception);
 }
 
 PRIVATE
@@ -514,10 +521,7 @@ Budget_sc::deactivate() override
   Unsigned64 clock = Timer::system_clock();
   Signed64 left = _oob_timeout.get_timeout(clock);
 
-  _left = max(left, static_cast<Signed64>(0));
-  if (left < 0)
-      printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>> BSC[%p]: budget overrun by %lld.\n", this, left * (-1));
-
+  set_left(max(left, static_cast<Signed64>(0)));
   _oob_timeout.reset();
 }
 
