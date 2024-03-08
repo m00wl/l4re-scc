@@ -40,7 +40,7 @@ public:
 
   enum Type
   {
-    //Quant_sc,
+    Quant_sc,
     Budget_sc,
     Timer_window_sc,
   };
@@ -71,8 +71,20 @@ public:
   { set_left(_quantum); }
 
 private:
+  class Timeslice_timeout : public Timeout
+  {
+  public:
+    Timeslice_timeout(Quant_sc *sc) : _sc(sc)
+    {}
+
+  private:
+    bool expired() override;
+    Quant_sc *_sc;
+  };
+
   Unsigned64 _quantum;
   Unsigned64 _left;
+  Timeslice_timeout _tt;
 };
 
 class Budget_sc : public Sched_constraint
@@ -337,28 +349,46 @@ PUBLIC
 Quant_sc::Quant_sc(Ram_quota *q)
 : Sched_constraint(q),
   _quantum(Config::Default_time_slice),
-  _left(Config::Default_time_slice)
-{}
+  _left(Config::Default_time_slice),
+  _tt(this)
+{ set_run(true); }
+
+IMPLEMENT
+bool
+Quant_sc::Timeslice_timeout::expired()
+{ return true; }
 
 PUBLIC
 void
 Quant_sc::deactivate() override
-{ panic("Quant_sc::deactivate not implemented."); }
+{
+  Unsigned64 clock = Timer::system_clock();
+  Signed64 left = _tt.get_timeout(clock);
+  _tt.reset();
+
+  if (left > 0)
+    set_left(left);
+  else
+    replenish();
+}
 
 PUBLIC
 void
 Quant_sc::activate() override
-{ panic("Quant_sc::activate not implemented."); }
+{
+  Unsigned64 clock = Timer::system_clock();
+  _tt.set(clock + _left, current_cpu());
+}
 
 PUBLIC
 void
 Quant_sc::migrate_away() override
-{ panic("Quant_sc::migrate_away not implemented."); }
+{}
 
 PUBLIC
 void
 Quant_sc::migrate_to(Cpu_number) override
-{ panic("Quant_sc::migrate_to not implemented."); }
+{}
 
 static Kmem_slab_t<Budget_sc> _budget_sc_allocator("Budget_sc");
 

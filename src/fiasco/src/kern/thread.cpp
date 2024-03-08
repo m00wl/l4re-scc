@@ -311,11 +311,11 @@ PUBLIC
 void
 Thread::alloc_sched_constraints()
 {
-  Budget_sc *bsc = Budget_sc::create(_quota);
-  assert(bsc);
-  bsc->inc_ref();
-  sched()->attach(bsc);
-  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> C[addr:%p, cpu:%d]-SC[%p]-BSC[%p]\n", this, cxx::int_value<Cpu_number>(this->home_cpu()), sched(), bsc);
+  Quant_sc *qsc = Quant_sc::create(_quota);
+  assert(qsc);
+  qsc->inc_ref();
+  sched()->attach(qsc);
+  if (M_SCHEDULER_DEBUG) printf("SCHEDULER> C[addr:%p, cpu:%d]-SC[%p]-BSC[%p]\n", this, cxx::int_value<Cpu_number>(this->home_cpu()), sched(), qsc);
 }
 
 // IPC-gate deletion stuff ------------------------------------
