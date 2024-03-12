@@ -242,6 +242,10 @@ L4_INLINE void
 l4_thread_control_exc_handler_u(l4_cap_idx_t exc_handler,
                                 l4_utcb_t *utcb) L4_NOTHROW;
 
+L4_INLINE void
+l4_thread_control_sched_exc_handler_u(l4_cap_idx_t sched_exc_handler,
+                                l4_utcb_t *utcb) L4_NOTHROW;
+
 /**
  * Bind the thread to a task.
  * \ingroup l4_thread_control_api
@@ -727,6 +731,7 @@ enum L4_thread_control_flags
   L4_THREAD_CONTROL_UX_NATIVE       = 0x0800000,
   /** The exception handler of the thread will be given. */
   L4_THREAD_CONTROL_SET_EXC_HANDLER = 0x1000000,
+  L4_THREAD_CONTROL_SET_SCHED_EXC_HANDLER = 0x2000000,
 };
 
 /**
@@ -743,6 +748,7 @@ enum L4_thread_control_mr_indices
   L4_THREAD_CONTROL_MR_IDX_FLAGS       = 0, /**< \see #L4_thread_control_flags. */
   L4_THREAD_CONTROL_MR_IDX_PAGER       = 1, /**< Index for pager cap */
   L4_THREAD_CONTROL_MR_IDX_EXC_HANDLER = 2, /**< Index for exception handler */
+  L4_THREAD_CONTROL_MR_IDX_SCHED_EXC_HANDLER = 3, /**< Index for sched exception handler */
   L4_THREAD_CONTROL_MR_IDX_FLAG_VALS   = 4, /**< Index for feature values */
   L4_THREAD_CONTROL_MR_IDX_BIND_UTCB   = 5, /**< Index for UTCB address for bind */
   L4_THREAD_CONTROL_MR_IDX_BIND_TASK   = 6, /**< Index for task flex-page for bind */
@@ -814,6 +820,17 @@ l4_thread_control_exc_handler_u(l4_cap_idx_t exc_handler,
   v->mr[L4_THREAD_CONTROL_MR_IDX_FLAGS]       |= L4_THREAD_CONTROL_SET_EXC_HANDLER;
   v->mr[L4_THREAD_CONTROL_MR_IDX_EXC_HANDLER]  = exc_handler;
 }
+
+L4_INLINE void
+l4_thread_control_sched_exc_handler_u(l4_cap_idx_t sched_exc_handler,
+                                l4_utcb_t *utcb) L4_NOTHROW
+{
+  l4_msg_regs_t *v = l4_utcb_mr_u(utcb);
+  v->mr[L4_THREAD_CONTROL_MR_IDX_FLAGS]              |= L4_THREAD_CONTROL_SET_SCHED_EXC_HANDLER;
+  v->mr[L4_THREAD_CONTROL_MR_IDX_SCHED_EXC_HANDLER]  = sched_exc_handler;
+}
+
+
 
 L4_INLINE void
 l4_thread_control_bind_u(l4_utcb_t *thread_utcb, l4_cap_idx_t task,

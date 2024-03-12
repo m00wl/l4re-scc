@@ -1019,6 +1019,116 @@ template< typename Derived, typename Base1, typename Base2, typename Base3,
           long PROTO, typename S_DEMAND >
 L4____GEN_TI(Kobject_3t<Derived, Base1, Base2, Base3, PROTO, S_DEMAND>);
 
+template<
+  typename Derived,
+  typename Base1,
+  typename Base2,
+  typename Base3,
+  typename Base4,
+  long PROTO = PROTO_ANY,
+  typename S_DEMAND = Type_info::Demand_t<>
+>
+struct Kobject_4t : Base1, Base2, Base3, Base4
+{
+protected:
+  /// \copydoc L4::Kobject_t::Class
+  typedef Derived Class;
+  /// \copydoc L4::Kobject_t::__Iface
+  typedef Typeid::Iface<PROTO, Derived> __Iface;
+  /// \copydoc L4::Kobject_t::__Iface_list
+  typedef Typeid::Merge_list<
+    Typeid::Iface_list<__Iface>,
+    Typeid::Merge_list<
+      typename Base1::__Iface_list,
+      Typeid::Merge_list<
+        typename Base2::__Iface_list,
+        Typeid::Merge_list<
+          typename Base3::__Iface_list,
+          typename Base4::__Iface_list
+        >
+      >
+    >
+  > __Iface_list;
+
+  /// \copydoc L4::Kobject_t::__check_protocols__()
+  static void __check_protocols__() noexcept
+  {
+    typedef typename Base1::__Iface_list Base1_proto_list;
+    typedef typename Base2::__Iface_list Base2_proto_list;
+    typedef typename Base3::__Iface_list Base3_proto_list;
+    typedef typename Base4::__Iface_list Base4_proto_list;
+
+    typedef Typeid::Iface_conflict<__Iface, Base1_proto_list> Base1_conflict;
+    typedef Typeid::Iface_conflict<__Iface, Base2_proto_list> Base2_conflict;
+    typedef Typeid::Iface_conflict<__Iface, Base3_proto_list> Base3_conflict;
+    typedef Typeid::Iface_conflict<__Iface, Base4_proto_list> Base4_conflict;
+
+    static_assert(!Base1_conflict::value, "ambiguous protocol ID, also in Base1");
+    static_assert(!Base2_conflict::value, "ambiguous protocol ID, also in Base2");
+    static_assert(!Base3_conflict::value, "ambiguous protocol ID, also in Base3");
+    static_assert(!Base4_conflict::value, "ambiguous protocol ID, also in Base4");
+
+    typedef Typeid::Conflict<Base1_proto_list, Base2_proto_list> Conflict_bases12;
+    typedef Typeid::Conflict<Base1_proto_list, Base3_proto_list> Conflict_bases13;
+    typedef Typeid::Conflict<Base1_proto_list, Base4_proto_list> Conflict_bases14;
+    typedef Typeid::Conflict<Base2_proto_list, Base3_proto_list> Conflict_bases23;
+    typedef Typeid::Conflict<Base2_proto_list, Base4_proto_list> Conflict_bases24;
+    typedef Typeid::Conflict<Base3_proto_list, Base4_proto_list> Conflict_bases34;
+
+    static_assert(!Conflict_bases12::value, "ambiguous protocol IDs in base classes: Base1 and Base2");
+    static_assert(!Conflict_bases13::value, "ambiguous protocol IDs in base classes: Base1 and Base3");
+    static_assert(!Conflict_bases14::value, "ambiguous protocol IDs in base classes: Base1 and Base4");
+    static_assert(!Conflict_bases23::value, "ambiguous protocol IDs in base classes: Base2 and Base3");
+    static_assert(!Conflict_bases24::value, "ambiguous protocol IDs in base classes: Base2 and Base4");
+    static_assert(!Conflict_bases34::value, "ambiguous protocol IDs in base classes: Base3 and Base4");
+  }
+
+  // disambiguate cap()
+  l4_cap_idx_t cap() const noexcept
+  { return Base1::cap(); }
+
+  /// \copydoc L4::Kobject_t::c()
+  L4::Cap<Class> c() const noexcept { return L4::Cap<Class>(this->cap()); }
+
+  L4____GEN_TI_MEMBERS(Type_info::Demand_union_t<Type_info::Demand_union_t<Type_info::Demand_union_t<
+    typename Base1::__Kobject_typeid::Demand,
+    typename Base2::__Kobject_typeid::Demand>,
+    typename Base3::__Kobject_typeid::Demand>,
+    typename Base4::__Kobject_typeid::Demand>
+  )
+
+public:
+  // Provide non-ambiguous conversion to Kobject
+  operator Kobject const & () const noexcept
+  { return *static_cast<Base1 const *>(this); }
+
+  // Provide non-ambiguous access of dec_refcnt()
+  l4_msgtag_t dec_refcnt(l4_mword_t diff, l4_utcb_t *utcb = l4_utcb())
+    noexcept(noexcept(((Base1*)0)->dec_refcnt(diff, utcb)))
+  { return Base1::dec_refcnt(diff, utcb); }
+};
+
+
+template< typename Derived, typename Base1, typename Base2, typename Base3, typename Base4,
+          long PROTO, typename S_DEMAND >
+Type_info const *const
+Kobject_4t<Derived, Base1, Base2, Base3, Base4, PROTO, S_DEMAND>::__Kobject_typeid::_b[] =
+{
+  &Base1::__Kobject_typeid::_m,
+  &Base2::__Kobject_typeid::_m,
+  &Base3::__Kobject_typeid::_m,
+  &Base4::__Kobject_typeid::_m
+};
+
+/**
+ * \internal
+ * \ingroup l4_kobject_rtti
+ */
+template< typename Derived, typename Base1, typename Base2, typename Base3, typename Base4,
+          long PROTO, typename S_DEMAND >
+L4____GEN_TI(Kobject_4t<Derived, Base1, Base2, Base3, Base4, PROTO, S_DEMAND>);
+
+
 }
 
 #if __cplusplus >= 201103L

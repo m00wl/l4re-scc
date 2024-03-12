@@ -413,6 +413,7 @@ public:
     Label_exception  = -5L,     ///< Exception IPC protocol.
     Label_sigma0 = -6L,         ///< Protocol for sigma0 objects.
     Label_io_page_fault = -8L,  ///< Protocol for I/O-port page faults.
+    Label_sched_exception = -9L,  ///< Protocol for I/O-port page faults.
     Label_kobject = -10L,       ///< Control protocol iD for IPC gates (server
                                 ///  side).
     Label_task = -11L,          ///< Protocol ID for task and VM objects.

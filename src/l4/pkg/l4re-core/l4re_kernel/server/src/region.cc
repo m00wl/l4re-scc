@@ -137,6 +137,15 @@ Region_map::op_exception(L4::Exception::Rights, l4_exc_regs_t &u,
   return -L4_ENOREPLY;
 }
 
+int
+Region_map::op_sched_exception(L4::Sched_exception::Rights)
+{
+  Dbg w(Dbg::Warn);
+  w.printf("%s: Unhandled sched exception\n", Global::l4re_aux->binary);
+
+  return -L4_ENOREPLY;
+}
+
 long
 Region_map::op_io_page_fault(L4::Io_pager::Rights,
                              l4_fpage_t io_pfa, l4_umword_t pc,

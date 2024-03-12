@@ -84,6 +84,13 @@ leave_by_trigger_exception:
 	str	x1,  [x0, #EF_ESR]
 	b	slowtrap_entry
 
+.type leave_by_trigger_sched_exception, function
+.global leave_by_trigger_sched_exception
+leave_by_trigger_sched_exception:
+	mov	x1, #(0x3e << 26)
+	str	x1,  [x0, #EF_ESR]
+  b slowtrap_entry_sched
+
 .type	fast_ret_from_irq, function
 .global	fast_ret_from_irq
 .type	__return_from_user_invoke, function

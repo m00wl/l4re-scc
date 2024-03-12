@@ -573,6 +573,7 @@ int __pthread_mgr_create_thread(pthread_descr thread, char **tos,
   attr.bind(nt_utcb, L4Re::This_task);
   attr.pager(e->rm());
   attr.exc_handler(e->rm());
+  attr.sched_exc_handler(e->rm());
   if ((err = l4_error(_t->control(attr))) < 0)
    {
      fprintf(stderr, "ERROR: thread control returned: %d\n", err);

@@ -294,7 +294,7 @@ public:
     dbg.printf("tag=%lx (proto=%lx) obj=%lx", tag.raw,
                tag.label(), obj);
 
-    if (tag.is_exception())
+    if (tag.is_exception() || tag.is_sched_exception())
       {
         dbg.cprintf("\n");
         Dbg(Dbg::Exceptions).printf("unhandled exception...\n");
@@ -517,7 +517,7 @@ static __attribute__((used, section(".preinit_array")))
 int main(int argc, char**argv)
 {
   (void)argc; (void)argv;
-  Dbg::set_level(Dbg::Info | Dbg::Warn);
+  Dbg::set_level(Dbg::Info | Dbg::Warn | Dbg::Exceptions);
   //Dbg::set_level(Dbg::Info | Dbg::Warn | Dbg::Boot);
 
   info.printf("Hello world\n");

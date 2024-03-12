@@ -63,17 +63,19 @@ public:
 
   enum Control_flags
   {
-    Ctl_set_pager       = 0x0010000,
-    Ctl_bind_task       = 0x0200000,
-    Ctl_alien_thread    = 0x0400000,
-    Ctl_ux_native       = 0x0800000,
-    Ctl_set_exc_handler = 0x1000000,
+    Ctl_set_pager             = 0x0010000,
+    Ctl_bind_task             = 0x0200000,
+    Ctl_alien_thread          = 0x0400000,
+    Ctl_ux_native             = 0x0800000,
+    Ctl_set_exc_handler       = 0x1000000,
+    Ctl_set_sched_exc_handler = 0x2000000,
   };
 
   enum Ex_regs_flags
   {
-    Exr_cancel            = 0x10000,
-    Exr_trigger_exception = 0x20000,
+    Exr_cancel                  = 0x10000,
+    Exr_trigger_exception       = 0x20000,
+    Exr_trigger_sched_exception = 0x40000,
   };
 
   enum Vcpu_ctl_flags
@@ -139,6 +141,7 @@ protected:
   // More ipc state
   Thread_ptr _pager;
   Thread_ptr _exc_handler;
+  Thread_ptr _sched_exc_handler;
 
 protected:
   Ram_quota *_quota;
@@ -680,13 +683,17 @@ Thread::kill()
 
 PUBLIC
 long
-Thread::control(Thread_ptr const &pager, Thread_ptr const &exc_handler)
+Thread::control(Thread_ptr const &pager, Thread_ptr const &exc_handler,
+                Thread_ptr const &sched_exc_handler)
 {
   if (pager.is_valid())
     _pager = pager;
 
   if (exc_handler.is_valid())
     _exc_handler = exc_handler;
+
+  if (sched_exc_handler.is_valid())
+    _sched_exc_handler = sched_exc_handler;
 
   return 0;
 }

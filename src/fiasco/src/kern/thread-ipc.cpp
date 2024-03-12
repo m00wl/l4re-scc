@@ -913,6 +913,70 @@ Thread::send_exception(Trap_state *ts)
   return exception(handler, ts, rights);
 }
 
+PUBLIC
+int
+Thread::send_sched_exception(Trap_state *ts)
+{
+  assert(cpu_lock.test());
+
+  int ret = 1;
+  L4_fpage::Rights rights = L4_fpage::Rights(0);
+  Kobject_iface *handler = _sched_exc_handler.ptr(space(), &rights);
+
+  if (EXPECT_FALSE(!handler))
+  {
+    printf("T[%p] had no sched exc handler during sched exc\n", this);
+    handler = this; // block on ourselves
+    ret = 0;
+  }
+
+  state_change(~Thread_cancel, Thread_in_exception);
+
+  Syscall_frame r;
+  L4_timeout_pair timeout(L4_timeout::Never, L4_timeout::Never);
+
+  //CNT_SCHED_EXC_IPC;
+
+  Mword vcpu_irqs = vcpu_disable_irqs();
+  Mem::barrier();
+
+  void *old_utcb_handler = _utcb_handler;
+  _utcb_handler = ts;
+
+  // fill registers for IPC
+  Utcb *utcb = this->utcb().access(true);
+  Buf_utcb_saver saved_state(utcb);
+
+  utcb->buf_desc = L4_buf_desc(0, 0, 0, 0);
+  //utcb->buffers[0] = L4_msg_item::map(0).raw();
+  //utcb->buffers[1] = L4_fpage::all_spaces().raw();
+
+  // clear regs
+  //L4_msg_tag tag(L4_exception_ipc::Msg_size, 0, L4_msg_tag::Transfer_fpu,
+  //               L4_msg_tag::Label_exception);
+  L4_msg_tag tag(0, 0, 0, L4_msg_tag::Label_sched_exception);
+
+  r.tag(tag);
+  r.timeout(timeout);
+  r.from(0);
+  r.ref(L4_obj_ref(_sched_exc_handler.raw(), L4_obj_ref::Ipc_call_ipc));
+  spill_user_state();
+  handler->invoke(r.ref(), rights, &r, utcb);
+  fill_user_state();
+
+  saved_state.restore(utcb);
+
+  state_del(Thread_in_exception);
+
+  // restore original utcb_handler
+  _utcb_handler = old_utcb_handler;
+  Mem::barrier();
+  vcpu_restore_irqs(vcpu_irqs);
+
+  // TOMO: for now, just ignore any errors
+  return ret;
+}
+
 PRIVATE static
 bool
 Thread::try_transfer_local_id(L4_buf_iter::Item const *const buf,

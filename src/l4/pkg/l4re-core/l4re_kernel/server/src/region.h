@@ -11,6 +11,7 @@
 
 #include <l4/sys/types.h>
 #include <l4/sys/exception>
+#include <l4/sys/sched_exception>
 #include <l4/re/dataspace>
 #include <l4/re/util/region_mapping_svr_2>
 #include <l4/re/debug>
@@ -45,7 +46,7 @@ private:
 
 public:
   typedef L4::Cap<L4Re::Dataspace> Dataspace;
-  typedef L4::Kobject_3t<void, L4Re::Rm, L4::Exception, L4Re::Debug_obj> Interface;
+  typedef L4::Kobject_4t<void, L4Re::Rm, L4::Exception, L4::Sched_exception, L4Re::Debug_obj> Interface;
   enum { Have_find = true };
   void *server_iface() const { return 0; }
   static int validate_ds(void *, L4::Ipc::Snd_fpage const &ds_cap,
@@ -73,6 +74,7 @@ public:
 
   int op_exception(L4::Exception::Rights, l4_exc_regs_t &regs,
                    L4::Ipc::Opt<L4::Ipc::Snd_fpage> &fp);
+  int op_sched_exception(L4::Sched_exception::Rights);
   long op_io_page_fault(L4::Io_pager::Rights,
                         l4_fpage_t io_pfa, l4_umword_t pc,
                         L4::Ipc::Opt<L4::Ipc::Snd_fpage> &);

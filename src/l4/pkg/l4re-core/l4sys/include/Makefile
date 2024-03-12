@@ -8,6 +8,7 @@ EXTRA_TARGET	+= capability kip task factory irq icu thread vcon \
                    sched_constraint		 \
                    platform_control    \
                    exception           \
+                   sched_exception     \
                    kobject             \
                    pager               \
                    rcv_endpoint        \

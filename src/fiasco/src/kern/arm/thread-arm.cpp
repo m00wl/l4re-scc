@@ -132,6 +132,7 @@ extern "C" {
   Mword pagefault_entry(const Mword pfa, Mword error_code,
                         const Mword pc, Return_frame *ret_frame);
   void slowtrap_entry(Trap_state *ts);
+  void slowtrap_entry_sched(Trap_state *ts);
 
   /**
    * The low-level page fault handler called from entry.S.  We're invoked with
@@ -227,6 +228,15 @@ extern "C" {
 
     t->kill();
   }
+
+  void slowtrap_entry_sched(Trap_state *ts)
+  {
+    Thread *t = current_thread();
+    if (t->send_sched_exception(ts))
+      return;
+
+    t->kill();
+  }
 };
 
 //---------------------------------------------------------------------------
@@ -243,6 +253,7 @@ Thread::Thread(Ram_quota *q)
 : Sender(0),
   _pager(Thread_ptr::Invalid),
   _exc_handler(Thread_ptr::Invalid),
+  _sched_exc_handler(Thread_ptr::Invalid),
   _quota(q),
   _del_observer(0)
 {

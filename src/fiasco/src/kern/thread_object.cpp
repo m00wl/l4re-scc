@@ -398,15 +398,20 @@ Thread_object::sys_control(L4_fpage::Rights rights, L4_msg_tag tag,
 
   Mword _old_pager = cxx::int_value<Cap_index>(_pager.raw()) << L4_obj_ref::Cap_shift;
   Mword _old_exc_handler = cxx::int_value<Cap_index>(_exc_handler.raw()) << L4_obj_ref::Cap_shift;
+  Mword _old_sched_exc_handler = cxx::int_value<Cap_index>(_sched_exc_handler.raw()) << L4_obj_ref::Cap_shift;
 
   Thread_ptr _new_pager(Thread_ptr::Invalid);
   Thread_ptr _new_exc_handler(Thread_ptr::Invalid);
+  Thread_ptr _new_sched_exc_handler(Thread_ptr::Invalid);
 
   if (flags & Ctl_set_pager)
     _new_pager = Thread_ptr(Cap_index(utcb->values[1] >> L4_obj_ref::Cap_shift));
 
   if (flags & Ctl_set_exc_handler)
     _new_exc_handler = Thread_ptr(Cap_index(utcb->values[2] >> L4_obj_ref::Cap_shift));
+
+  if (flags & Ctl_set_sched_exc_handler)
+    _new_sched_exc_handler = Thread_ptr(Cap_index(utcb->values[3] >> L4_obj_ref::Cap_shift));
 
   if (flags & Ctl_bind_task)
     {
@@ -430,7 +435,7 @@ Thread_object::sys_control(L4_fpage::Rights rights, L4_msg_tag tag,
   Mword del_state = 0;
   Mword add_state = 0;
 
-  long res = control(_new_pager, _new_exc_handler);
+  long res = control(_new_pager, _new_exc_handler, _new_sched_exc_handler);
 
   if (res < 0)
     return commit_result(res);
@@ -451,6 +456,7 @@ Thread_object::sys_control(L4_fpage::Rights rights, L4_msg_tag tag,
 
   out->values[1] = _old_pager;
   out->values[2] = _old_exc_handler;
+  out->values[3] = _old_sched_exc_handler;
 
   if (del_state || add_state)
     if (xcpu_state_change(~del_state, add_state, true))
@@ -557,8 +563,15 @@ Thread_object::ex_regs(Address ip, Address sp,
 
   if (ops & Exr_trigger_exception)
     {
+      printf("exr trigger exc\n");
       extern char leave_by_trigger_exception[];
       do_trigger_exception(regs(), leave_by_trigger_exception);
+    }
+  else if (ops & Exr_trigger_sched_exception)
+    {
+      printf("exr trigger sched exc\n");
+      extern char leave_by_trigger_sched_exception[];
+      do_trigger_exception(regs(), leave_by_trigger_sched_exception);
     }
 
   if (ip != ~0UL)

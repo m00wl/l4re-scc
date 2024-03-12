@@ -482,7 +482,8 @@ Budget_sc::timeslice_expired()
   //extern char leave_by_trigger_exception[];
   //t->do_trigger_exception(t->regs(), leave_by_trigger_exception);
   //t->send_exception(t->regs());
-  static_cast<Thread_object *>(t)->ex_regs(~0UL, ~0UL, 0, 0, 0, Thread::Exr_trigger_exception);
+  //t->send_sched_exception(t->regs());
+  static_cast<Thread_object *>(t)->ex_regs(~0UL, ~0UL, 0, 0, 0, Thread::Exr_trigger_sched_exception);
 }
 
 PRIVATE

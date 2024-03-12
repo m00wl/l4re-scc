@@ -63,7 +63,7 @@ Kernel_thread::init_workload()
   sigma0_thread->inc_ref();
   check (map(sigma0_thread, sigma0, sigma0, C_thread, 0));
 
-  check (sigma0_thread->control(Thread_ptr(Thread_ptr::Null), Thread_ptr(Thread_ptr::Null)) == 0);
+  check (sigma0_thread->control(Thread_ptr(Thread_ptr::Null), Thread_ptr(Thread_ptr::Null), Thread_ptr(Thread_ptr::Null)) == 0);
   check (sigma0_thread->bind(sigma0, User<Utcb>::Ptr((Utcb*)Mem_layout::Utcb_addr)));
   check (sigma0_thread->ex_regs(Kip::k()->sigma0_ip, 0));
 
@@ -100,7 +100,7 @@ Kernel_thread::init_workload()
   check (map(boot_task,   boot_task, boot_task, C_task, 0));
   check (map(boot_thread, boot_task, boot_task, C_thread, 0));
 
-  check (boot_thread->control(Thread_ptr(C_pager), Thread_ptr(Thread_ptr::Null)) == 0);
+  check (boot_thread->control(Thread_ptr(C_pager), Thread_ptr(Thread_ptr::Null), Thread_ptr(Thread_ptr::Null)) == 0);
   check (boot_thread->bind(boot_task, User<Utcb>::Ptr((Utcb*)Mem_layout::Utcb_addr)));
   check (boot_thread->ex_regs(Kip::k()->root_ip, 0));
 

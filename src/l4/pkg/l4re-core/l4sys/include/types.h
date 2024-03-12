@@ -59,6 +59,7 @@ enum L4_msgtag_protocol
   L4_PROTO_EXCEPTION     =  -5L, ///< Exception
   L4_PROTO_SIGMA0        =  -6L, ///< Sigma0 protocol
   L4_PROTO_IO_PAGE_FAULT =  -8L, ///< I/O page fault message
+  L4_PROTO_SCHED_EXCEPTION =  -9L, ///< Scheduling Exception
   L4_PROTO_KOBJECT       = -10L, ///< Protocol for messages to a generic kobject
   L4_PROTO_TASK          = -11L, ///< Protocol for messages to a task object
   L4_PROTO_THREAD        = -12L, ///< Protocol for messages to a thread object
@@ -187,6 +188,7 @@ typedef struct l4_msgtag_t
   bool is_sys_exception() const L4_NOTHROW { return label() == L4_PROTO_SYS_EXCEPTION; }
   /// Test if protocol indicates exception protocol.
   bool is_exception() const L4_NOTHROW { return label() == L4_PROTO_EXCEPTION; }
+  bool is_sched_exception() const L4_NOTHROW { return label() == L4_PROTO_SCHED_EXCEPTION; }
   /// Test if protocol indicates sigma0 protocol.
   bool is_sigma0() const L4_NOTHROW { return label() == L4_PROTO_SIGMA0; }
   /// Test if protocol indicates IO-page-fault protocol.

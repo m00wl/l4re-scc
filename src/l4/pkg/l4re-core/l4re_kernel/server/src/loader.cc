@@ -324,6 +324,7 @@ bool Loader::start(Cap<Dataspace> bin, Region_map *rm, l4re_aux_t *aux)
   Thread::Attr attr;
   attr.pager(__loader_entry.pager);
   attr.exc_handler(__loader_entry.pager);
+  attr.sched_exc_handler(__loader_entry.pager);
   attr.bind((l4_utcb_t*)env->first_free_utcb(), L4Re::This_task);
 
   env->first_free_utcb(env->first_free_utcb() + L4_UTCB_OFFSET);

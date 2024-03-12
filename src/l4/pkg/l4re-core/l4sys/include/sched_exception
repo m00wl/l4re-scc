@@ -1,0 +1,25 @@
+#pragma once
+
+#include <l4/sys/capability>
+#include <l4/sys/types.h>
+#include <l4/sys/cxx/ipc_types>
+#include <l4/sys/cxx/ipc_iface>
+
+namespace L4 {
+
+class L4_EXPORT Sched_exception :
+  public Kobject_0t<Sched_exception, L4_PROTO_SCHED_EXCEPTION>
+{
+public:
+  /**
+   * Exception call
+   *
+   * \return  Message tag containing error code.
+   *
+   */
+  L4_INLINE_RPC(l4_msgtag_t, sched_exception, ());
+
+  typedef L4::Typeid::Rpc_nocode<sched_exception_t> Rpcs;
+};
+
+}

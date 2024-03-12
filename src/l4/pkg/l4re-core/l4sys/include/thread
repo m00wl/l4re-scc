@@ -195,6 +195,12 @@ public:
      Cap<void> exc_handler() noexcept
      { return Cap<void>(l4_utcb_mr_u(_u)->mr[2]); }
 
+     void sched_exc_handler(Cap<void> const &sched_exc_handler) noexcept
+     { l4_thread_control_sched_exc_handler_u(sched_exc_handler.cap(), _u); }
+
+     Cap<void> sched_exc_handler() noexcept
+     { return Cap<void>(l4_utcb_mr_u(_u)->mr[3]); }
+
      /**
       * Bind the thread to a task.
       *
