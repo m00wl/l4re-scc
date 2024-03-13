@@ -30,6 +30,9 @@ public:
   void set_run(bool r)
   { _run = r; }
 
+  bool should_be_deleted() const
+  { return _manual_delete; }
+
   void block(Sched_context *scx);
   void deblock(Sched_context *scx);
 
@@ -50,6 +53,7 @@ private:
   bool _run;
   typedef cxx::Sd_list<Sched_context> Blocked_list;
   Blocked_list _list;
+  bool _manual_delete;
 };
 
 class Quant_sc : public Sched_constraint
@@ -199,15 +203,24 @@ Sched_constraint::operator new (size_t, void *b) throw()
 PUBLIC
 Sched_constraint::Sched_constraint(Ram_quota *q)
 : _quota(q),
-  _run(false)
+  _run(false),
+  _manual_delete(false)
 { printf("SC[%p]: created\n", this); }
 
 PUBLIC
 Sched_constraint::~Sched_constraint()
 {
   printf("SC[%p]: delete\n", this);
-  if (ref_cnt())
-    panic("trying to delete SC although it is still attached to a thread");
+  assert(ref_cnt() == 0);
+}
+
+PUBLIC
+bool
+Sched_constraint::put() override
+{
+  //printf("SC[%p]: initiate deletion (ref_cnt: %ld)\n", this, ref_cnt());
+  _manual_delete = (ref_cnt() > 0);
+  return !_manual_delete;
 }
 
 IMPLEMENT
@@ -310,7 +323,6 @@ sched_constraint_factory(Ram_quota *q, Space *, L4_msg_tag t, Utcb const *u,
       break;
   }
 
-  // TOMO: increase ref count here?
   return res;
 }
 

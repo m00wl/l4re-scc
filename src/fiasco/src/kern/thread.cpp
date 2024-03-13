@@ -598,8 +598,6 @@ Thread::do_kill()
   // thread for doing the last bits.
   force_to_invalid_cpu();
   sched()->deactivate();
-  // TOMO: only migrate away if we were the last thread the SC is attached to.
-  //sched()->migrate_away();
   if (sched()->is_blocked())
     sched()->blocked_by()->deblock(sched());
   kernel_context_drq(handle_kill_helper, 0);

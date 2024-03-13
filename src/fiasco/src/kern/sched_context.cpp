@@ -73,6 +73,30 @@ Sched_context::Sched_context()
   _blocked_by(nullptr)
 {}
 
+PUBLIC
+Sched_context::~Sched_context()
+{
+  for (Sched_constraint *&sc : _list)
+  {
+    if (!sc)
+      continue;
+
+    // TOMO: take sc lock here?
+    sc->dec_ref();
+
+    if (sc->should_be_deleted() && (sc->ref_cnt() == 0))
+    {
+      {
+        auto guard = lock_guard(cpu_lock);
+        sc->migrate_away();
+      }
+      //printf("delete SC[%p] during destructor of SCX[%p]\n", sc, this);
+      delete sc;
+      sc = nullptr;
+    }
+  }
+}
+
 /**
  * Return priority of Sched_context
  */
