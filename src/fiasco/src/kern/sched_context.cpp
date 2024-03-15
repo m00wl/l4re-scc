@@ -44,11 +44,11 @@ public:
 
 private:
   Unsigned8 _prio;
-  Spin_lock<> _lock;
+  //Spin_lock<> _lock;
   Sched_constraint *__scs[Config::Scx_max_sc] = { nullptr };
   typedef cxx::static_vector<Sched_constraint *, unsigned> Sc_list;
   Sc_list _list;
-  Sched_constraint *_blocked_by;
+  //Sched_constraint *_blocked_by;
 };
 
 // --------------------------------------------------------------------------
@@ -68,32 +68,18 @@ IMPLEMENTATION:
 PUBLIC
 Sched_context::Sched_context()
 : _prio(Config::Default_prio),
-  _lock(Spin_lock<>::Unlocked),
-  _list(&__scs[0], Config::Scx_max_sc),
-  _blocked_by(nullptr)
+  //_lock(Spin_lock<>::Unlocked),
+  _list(&__scs[0], Config::Scx_max_sc)
+  //_blocked_by(nullptr)
 {}
 
 PUBLIC
 Sched_context::~Sched_context()
 {
-  for (Sched_constraint *&sc : _list)
+  for (Sched_constraint *sc : _list)
   {
-    if (!sc)
-      continue;
-
-    // TOMO: take sc lock here?
-    sc->dec_ref();
-
-    if (sc->should_be_deleted() && (sc->ref_cnt() == 0))
-    {
-      {
-        auto guard = lock_guard(cpu_lock);
-        sc->migrate_away();
-      }
-      //printf("delete SC[%p] during destructor of SCX[%p]\n", sc, this);
-      delete sc;
-      sc = nullptr;
-    }
+    if (sc)
+      detach(sc);
   }
 }
 
@@ -164,32 +150,33 @@ Sched_context::is_constrained() const
   return false;
 }
 
-PUBLIC inline
-bool
-Sched_context::is_blocked() const
-{
-  return _blocked_by != nullptr;
-}
+//PUBLIC inline
+//bool
+//Sched_context::is_blocked() const
+//{
+//  return _blocked_by != nullptr;
+//}
 
-PUBLIC inline
-Sched_constraint *
-Sched_context::blocked_by() const
-{
-  return _blocked_by;
-}
+//PUBLIC inline
+//Sched_constraint *
+//Sched_context::blocked_by() const
+//{
+//  return _blocked_by;
+//}
 
-PUBLIC inline
-void
-Sched_context::reset_blocked()
-{
-  _blocked_by = nullptr;
-}
+//PUBLIC inline
+//void
+//Sched_context::reset_blocked()
+//{
+//  _blocked_by = nullptr;
+//}
 
 PUBLIC
 bool
 Sched_context::can_run()
 {
-  return is_blocked() ? false : check_sc_list();
+  //return is_blocked() ? false : check_sc_list();
+  return check_sc_list();
 }
 
 PRIVATE
@@ -204,8 +191,13 @@ Sched_context::check_sc_list()
     if (sc->can_run())
       continue;
 
+    auto guard { lock_guard(sc) };
+
+    if (sc->can_run())
+      continue;
+
     sc->block(this);
-    _blocked_by = sc;
+
     return false;
   }
 
@@ -218,10 +210,8 @@ Sched_context::deactivate() const
 {
   for (Sched_constraint *sc : _list)
   {
-    if (!sc)
-      continue;
-
-    sc->deactivate();
+    if (sc)
+      sc->deactivate();
   }
 }
 
@@ -231,10 +221,8 @@ Sched_context::activate() const
 {
   for (Sched_constraint *sc : _list)
   {
-    if (!sc)
-      continue;
-
-    sc->activate();
+    if (sc)
+      sc->activate();
   }
 }
 
@@ -244,10 +232,8 @@ Sched_context::migrate_away() const
 {
   for (Sched_constraint *sc : _list)
   {
-    if (!sc)
-      continue;
-
-    sc->migrate_away();
+    if (sc)
+      sc->migrate_away();
   }
 }
 
@@ -257,10 +243,8 @@ Sched_context::migrate_to(Cpu_number cpu) const
 {
   for (Sched_constraint *sc : _list)
   {
-    if (!sc)
-      continue;
-
-    sc->migrate_to(cpu);
+    if (sc)
+      sc->migrate_to(cpu);
   }
 }
 
@@ -295,7 +279,7 @@ Sched_context::attach(Sched_constraint *sc)
 {
   assert(sc);
 
-  auto l { lock_guard(_lock) };
+  //auto lg { lock_guard(_lock) };
 
   assert(!contains(sc));
 
@@ -318,7 +302,7 @@ Sched_context::detach(Sched_constraint *sc)
 {
   assert(sc);
 
-  auto l { lock_guard(_lock) };
+  //auto lg { lock_guard(_lock) };
 
   assert(contains(sc));
 
@@ -328,13 +312,23 @@ Sched_context::detach(Sched_constraint *sc)
       continue;
 
     i = nullptr;
+
+    auto guard { lock_guard(sc) };
+
+    sc->deblock(this);
     sc->dec_ref();
 
-    if (sc == _blocked_by)
+    if (sc->dying() && (sc->ref_cnt() == 0))
     {
-      sc->deblock(this);
-      _blocked_by = nullptr;
+      sc->migrate_away();
+      delete sc;
     }
+
+    //if (sc == _blocked_by)
+    //{
+    //  sc->deblock(this);
+    //  _blocked_by = nullptr;
+    //}
 
     return true;
   }

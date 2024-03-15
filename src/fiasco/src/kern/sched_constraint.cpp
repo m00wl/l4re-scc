@@ -6,6 +6,7 @@ INTERFACE:
 #include "globals.h"
 #include "kobject.h"
 #include "ref_obj.h"
+#include "spin_lock.h"
 
 #include "cxx/dlist"
 
@@ -13,7 +14,8 @@ class Sched_context;
 
 class Sched_constraint
 : public cxx::Dyn_castable<Sched_constraint, Kobject>,
-  public Ref_cnt_obj
+  public Ref_cnt_obj,
+  public Spin_lock<>
 {
 public:
   typedef Slab_cache Self_alloc;
@@ -30,8 +32,8 @@ public:
   void set_run(bool r)
   { _run = r; }
 
-  bool should_be_deleted() const
-  { return _manual_delete; }
+  bool dying() const
+  { return _dying; }
 
   void block(Sched_context *scx);
   void deblock(Sched_context *scx);
@@ -53,7 +55,7 @@ private:
   bool _run;
   typedef cxx::Sd_list<Sched_context> Blocked_list;
   Blocked_list _list;
-  bool _manual_delete;
+  bool _dying;
 };
 
 class Quant_sc : public Sched_constraint
@@ -204,7 +206,7 @@ PUBLIC
 Sched_constraint::Sched_constraint(Ram_quota *q)
 : _quota(q),
   _run(false),
-  _manual_delete(false)
+  _dying(false)
 { printf("SC[%p]: created\n", this); }
 
 PUBLIC
@@ -219,8 +221,8 @@ bool
 Sched_constraint::put() override
 {
   //printf("SC[%p]: initiate deletion (ref_cnt: %ld)\n", this, ref_cnt());
-  _manual_delete = (ref_cnt() > 0);
-  return !_manual_delete;
+  _dying = (ref_cnt() > 0);
+  return !_dying;
 }
 
 IMPLEMENT
@@ -229,6 +231,7 @@ Sched_constraint::block(Sched_context *scx)
 {
   assert(scx);
   assert(!in_my_blocked_list(scx));
+  assert(test());
 
   Ready_queue::rq.current().ready_dequeue(scx);
   _list.push_back(scx);
@@ -239,6 +242,7 @@ bool
 Sched_constraint::in_my_blocked_list(Sched_context *scx)
 {
   assert(scx);
+  assert(test());
 
   for (Sched_context *i : _list)
   {
@@ -254,15 +258,31 @@ void
 Sched_constraint::deblock(Sched_context *scx)
 {
   assert(scx);
-  assert(in_my_blocked_list(scx));
+  assert(test());
+  //assert(in_my_blocked_list(scx));
 
-  _list.remove(scx);
+  //if (in_my_blocked_list(scx))
+  //  _list.remove(scx);
+
+  for (Sched_context *i : _list)
+  {
+    if (scx == i)
+    {
+      _list.remove(scx);
+      scx->context()->xcpu_state_change(~0UL, Thread_ready);
+      return;
+    }
+  }
 }
 
 PROTECTED
 void
 Sched_constraint::wake_up_all_blocked()
 {
+  auto guard { lock_guard(this) };
+
+  assert(test());
+
   // TOMO: we want to requeue all blocked threads on THEIR home cpus
   // maybe with drq to them?
   //panic("wake_up_all_blocked() is tricky");
@@ -278,8 +298,9 @@ Sched_constraint::wake_up_all_blocked()
     // enqueue here somehow
     // what about migration happening here in parallel?
 
-    scx->reset_blocked();
-    Ready_queue::rq.current().ready_enqueue(scx);
+    //scx->reset_blocked();
+    scx->context()->xcpu_state_change(~0UL, Thread_ready);
+    //Ready_queue::rq.current().ready_enqueue(scx);
   }
 }
 
@@ -504,7 +525,6 @@ Budget_sc::period_expired()
 {
   // TOMO: requeue here?
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> BSC[%p]: period_expired\n", this);
-  //printf("SCHEDULER> BSC[%p]: period_expired\n", this);
   replenish();
   calc_and_schedule_next_repl(current_cpu());
 
@@ -656,11 +676,16 @@ Timer_window_sc::Timer_window_sc(Ram_quota *q, Unsigned64 s, Unsigned64 d)
   bool in_window;
   in_window = ((now >= s) && (now <= s + d));
   set_run(in_window);
+  calc_and_schedule_next_timeout();
 }
+
+PUBLIC
+Timer_window_sc::~Timer_window_sc()
+{ _timeout.reset(); }
 
 PRIVATE
 void
-Timer_window_sc::calc_and_schedule_next_timeout(Cpu_number target)
+Timer_window_sc::calc_and_schedule_next_timeout()
 {
   Unsigned64 now { Timer::system_clock() };
 
@@ -686,7 +711,7 @@ Timer_window_sc::calc_and_schedule_next_timeout(Cpu_number target)
   }
 
   if (M_SCHEDULER_DEBUG) printf("TWSC[%p]: setting timeout @ %llu\n", this, time);
-  _timeout.set(time, target);
+  _timeout.set(time, current_cpu());
 }
 
 PRIVATE
@@ -695,7 +720,7 @@ Timer_window_sc::flip_state()
 {
   set_run(!can_run());
   _timeout.reset();
-  calc_and_schedule_next_timeout(current_cpu());
+  calc_and_schedule_next_timeout();
   if (can_run())
     wake_up_all_blocked();
 }
@@ -725,10 +750,10 @@ Timer_window_sc::activate() override
 PUBLIC
 void
 Timer_window_sc::migrate_away() override
-{ _timeout.reset(); }
+{}
 
 PUBLIC
 void
-Timer_window_sc::migrate_to(Cpu_number target) override
-{ calc_and_schedule_next_timeout(target); }
+Timer_window_sc::migrate_to(Cpu_number) override
+{}
 

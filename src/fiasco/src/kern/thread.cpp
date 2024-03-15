@@ -598,8 +598,6 @@ Thread::do_kill()
   // thread for doing the last bits.
   force_to_invalid_cpu();
   sched()->deactivate();
-  if (sched()->is_blocked())
-    sched()->blocked_by()->deblock(sched());
   kernel_context_drq(handle_kill_helper, 0);
   kdb_ke("I'm dead");
   return true;
@@ -857,6 +855,7 @@ void
 Thread::finish_migration() override
 {
   if (M_MIGRATION_DEBUG) printf("MIGRATION> C[%p]: finish migration\n", this);
+  sched()->migrate_to(home_cpu());
   enqueue_timeout_again();
 }
 
@@ -1405,7 +1404,7 @@ Thread::migrate_to(Cpu_number target_cpu, bool /*remote*/)
           return false;
         }
 
-      sched()->migrate_to(target_cpu);
+      //sched()->migrate_to(target_cpu);
 
       // migrated meanwhile
       if (access_once(&_home_cpu) != target_cpu || _pending_rq.queued())

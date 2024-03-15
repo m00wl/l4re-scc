@@ -73,9 +73,14 @@ void sc_funct()
   s->attach_sc(t1, sc);
   s->attach_sc(t2, sc);
 
-  l4_sched_param_t sp = l4_sched_param(255, 0);
-  s->run_thread(t1, sp);
-  s->run_thread(t2, sp);
+  l4_sched_param_t sp1 = l4_sched_param(255);
+  sp1.affinity.map = 1;
+  sp1.affinity.set(0, 0);
+  s->run_thread(t1, sp1);
+  l4_sched_param_t sp2 = l4_sched_param(255);
+  sp2.affinity.map = 1;
+  sp2.affinity.set(0, 1);
+  s->run_thread(t2, sp2);
 
   for(int i = 0; i < 15; i++)
   {
@@ -148,8 +153,8 @@ void sc_clean(void)
 
 int main(void)
 {
-  //sc_funct();
-  sc_clean();
+  sc_funct();
+  //sc_clean();
 
   return 0;
 }
