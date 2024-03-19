@@ -45,6 +45,7 @@ public:
 
   enum Type
   {
+    Cond_sc,
     Quant_sc,
     Budget_sc,
     Timer_window_sc,
@@ -57,6 +58,9 @@ private:
   Blocked_list _list;
   bool _dying;
 };
+
+class Cond_sc : public Sched_constraint
+{};
 
 class Quant_sc : public Sched_constraint
 {
@@ -355,6 +359,54 @@ register_factory()
 }
 
 }
+
+static Kmem_slab_t<Cond_sc> _cond_sc_allocator("Cond_sc");
+
+PRIVATE static
+Cond_sc::Self_alloc *
+Cond_sc::allocator()
+{ return _cond_sc_allocator.slab(); }
+
+PUBLIC inline
+void
+Cond_sc::operator delete (void *ptr)
+{
+  Cond_sc *sc = reinterpret_cast<Cond_sc *>(ptr);
+  allocator()->q_free<Ram_quota>(sc->get_quota(), sc);
+}
+
+PUBLIC static
+Cond_sc *
+Cond_sc::create(Ram_quota *q)
+{
+  void *p = allocator()->q_alloc<Ram_quota>(q);
+  return p ? new (p) Cond_sc(q) : 0;
+}
+
+PUBLIC
+Cond_sc::Cond_sc(Ram_quota *q)
+: Sched_constraint (q)
+{ set_run(true); }
+
+PUBLIC
+void
+Cond_sc::deactivate() override
+{}
+
+PUBLIC
+void
+Cond_sc::activate() override
+{}
+
+PUBLIC
+void
+Cond_sc::migrate_away() override
+{}
+
+PUBLIC
+void
+Cond_sc::migrate_to(Cpu_number) override
+{}
 
 static Kmem_slab_t<Quant_sc> _quant_sc_allocator("Quant_sc");
 

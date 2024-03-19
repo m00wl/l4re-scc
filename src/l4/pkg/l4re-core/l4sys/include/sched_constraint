@@ -14,6 +14,7 @@ class Sched_constraint
 public:
   enum Type
   {
+    Cond_sc,
     Quant_sc,
     Budget_sc,
     Timer_window_sc,

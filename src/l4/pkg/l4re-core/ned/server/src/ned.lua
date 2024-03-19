@@ -78,9 +78,10 @@ Dbg = {
 
 -- Sched_constraint types
 SC_types = {
-  Quant_sc        = 0,
-  Budget_sc       = 1,
-  Timer_window_sc = 2,
+  Cond_sc         = 0,
+  Quant_sc        = 1,
+  Budget_sc       = 2,
+  Timer_window_sc = 3,
 }
 
 -- Loader class, encapsulates a loader instance.
