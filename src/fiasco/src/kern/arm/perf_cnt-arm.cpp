@@ -215,6 +215,7 @@ Perf_cnt::init_cpu()
   cntens((1ul << 31) | ((1ul << _nr_counters) - 1));
 
   //set_event_type(0, 8);
+  pmccfilt(1 << 27);
 
   // allow user to access events
   useren(1);
@@ -225,7 +226,7 @@ IMPLEMENTATION [arm && perf_cnt]:
 
 #include <cstdio>
 #include "static_init.h"
-#include "tb_entry.h"
+//#include "tb_entry.h"
 
 Perf_cnt::Perf_read_fn Perf_cnt::read_pmc[Max_slot] =
 { dummy_read_pmc, dummy_read_pmc };
@@ -350,7 +351,7 @@ Perf_cnt::setup_pmc(Mword slot, Mword event, Mword, Mword, Mword)
 
   set_event_type(slot, event);
 
-  Tb_entry::set_rdcnt(slot, read_pmc[slot]);
+  //Tb_entry::set_rdcnt(slot, read_pmc[slot]);
 
   return 1;
 }

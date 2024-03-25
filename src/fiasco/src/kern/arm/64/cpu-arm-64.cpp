@@ -135,19 +135,9 @@ public:
                     | Sctlr_res,
   };
 
-  enum {
-    Mdcr_hpmn_mask = 0xf,
-    Mdcr_tpmcr     = 1UL << 5,
-    Mdcr_tpm       = 1UL << 6,
-    Mdcr_hpme      = 1UL << 7,
-    Mdcr_tde       = 1UL << 8,
-    Mdcr_tda       = 1UL << 9,
-    Mdcr_tdosa     = 1UL << 10,
-    Mdcr_tdra      = 1UL << 11,
-
-    Mdcr_bits      = Mdcr_tpmcr | Mdcr_tpm
-                     | Mdcr_tda | Mdcr_tdosa | Mdcr_tdra,
-    Mdcr_vm_mask   = 0xf00,
+  enum
+  {
+    Mdcr_bits = Mdcr_tpmcr | Mdcr_tda | Mdcr_tdosa | Mdcr_tdra,
   };
 };
 
@@ -185,7 +175,8 @@ Cpu::init_hyp_mode()
                     | (Page::Tcr_attribs << 8)
                     | Page::Vtcr_bits));
 
-  asm volatile ("msr MDCR_EL2, %x0" : : "r"((Mword)Mdcr_bits));
+  Mword mdcr = Mword{Mdcr_bits} | (has_hpmn0() ? 0 : 1);
+  asm volatile ("msr MDCR_EL2, %x0" : : "r"(mdcr));
 
   asm volatile ("msr SCTLR_EL1, %x0" : : "r"((Mword)Sctlr_el1_generic));
   asm volatile ("msr HCR_EL2, %x0" : : "r" (Hcr_non_vm_bits));
@@ -206,6 +197,11 @@ PUBLIC static inline
 bool
 Cpu::has_generic_timer()
 { return true; }
+
+PUBLIC inline
+bool
+Cpu::has_hpmn0() const
+{ return ((_cpu_id._dfr0 >> 60) & 0xf) == 1; }
 
 PUBLIC static inline
 Mword
