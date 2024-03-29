@@ -336,6 +336,12 @@ sched_constraint_factory(Ram_quota *q, Space *, L4_msg_tag t, Utcb const *u,
 
   switch (*type)
   {
+    case Sched_constraint::Type::Cond_sc:
+      res = Cond_sc::create(q);
+      break;
+    case Sched_constraint::Type::Quant_sc:
+      res = Quant_sc::create(q);
+      break;
     case Sched_constraint::Type::Budget_sc:
       res = Budget_sc::create(q);
       break;
