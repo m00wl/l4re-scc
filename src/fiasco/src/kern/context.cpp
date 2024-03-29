@@ -821,7 +821,7 @@ Context::schedule()
 }
 
 
-PUBLIC //inline
+PUBLIC inline
 void
 Context::schedule_if(bool s)
 {
@@ -1050,7 +1050,7 @@ Context::consumed_time()
  * @param t Destination thread whose scheduling context and execution context
  *          should be activated.
  */
-PROTECTED //inline NEEDS ["assert.h", Context::switch_handle_drq]
+PROTECTED inline NEEDS ["assert.h", Context::switch_handle_drq]
 Context::Switch FIASCO_WARN_RESULT
 Context::schedule_switch_to_locked(Context *t)
 {
@@ -1083,7 +1083,7 @@ Context::switch_to_locked(Context *t)
     schedule();
 }
 
-PUBLIC //inline NEEDS [Context::switch_to_locked]
+PUBLIC inline NEEDS [Context::switch_to_locked]
 bool
 Context::deblock_and_schedule(Context *to)
 {
@@ -1367,7 +1367,7 @@ Context::try_finish_migration()
  * \return true if re-scheduling is needed (ready queue has changed),
  *         false if not.
  */
-PUBLIC //inline
+PUBLIC inline
 bool
 Context::handle_drq()
 {
@@ -1472,7 +1472,7 @@ Context::set_home_cpu(Cpu_number cpu)
  * This function must be used to change the state of contexts that are
  * potentially running on a different CPU.
  */
-PUBLIC //inline NEEDS[Context::pending_rqq_enqueue, "thread_state.h"]
+PUBLIC inline NEEDS[Context::pending_rqq_enqueue, "thread_state.h"]
 bool
 Context::xcpu_state_change(Mword mask, Mword add, bool lazy_q = false)
 {
@@ -1516,7 +1516,7 @@ Context::xcpu_state_change(Mword mask, Mword add, bool lazy_q = false)
  *
  * This function enqueues a DRQ and blocks the current context for a reply DRQ.
  */
-PUBLIC //inline NEEDS[Context::enqueue_drq, "logdefs.h", "thread_state.h"]
+PUBLIC inline NEEDS[Context::enqueue_drq, "logdefs.h", "thread_state.h"]
 void
 Context::drq(Drq *drq, Drq::Request_func *func, void *arg,
              Drq::Wait_mode wait = Drq::Wait)
@@ -1582,7 +1582,7 @@ Context::kernel_context_drq(Drq::Request_func *func, void *arg)
   return schedule_switch_to_locked(kc) != Switch::Ok;
 }
 
-PUBLIC //inline NEEDS[Context::drq]
+PUBLIC inline NEEDS[Context::drq]
 void
 Context::drq(Drq::Request_func *func, void *arg,
              Drq::Wait_mode wait = Drq::Wait)

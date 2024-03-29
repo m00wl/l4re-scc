@@ -398,7 +398,7 @@ Rcu_data::check_quiescent_state(Rcu_glbl *rgp)
 }
 
 
-PUBLIC static //inline NEEDS["cpu_lock.h", "globals.h", "lock_guard.h", "logdefs.h"]
+PUBLIC static inline NEEDS["cpu_lock.h", "globals.h", "lock_guard.h", "logdefs.h"]
 void
 Rcu::call(Rcu_item *i, bool (*cb)(Rcu_item *))
 {
