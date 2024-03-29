@@ -147,7 +147,6 @@ IMPLEMENTATION:
 #include "processor.h"
 #include "timer.h"
 #include "warn.h"
-#include "context.h"
 #include "ready_queue.h"
 
 PUBLIC
@@ -320,9 +319,6 @@ PRIVATE inline
 Thread::Check_sender
 Thread::check_sender(Thread *sender, bool timeout)
 {
-  //(void)sender;
-  //(void)timeout;
-  //panic("Thread::check_sender: sc not available here\n");
   if (EXPECT_FALSE(is_invalid()))
     {
       sender->utcb().access()->error = L4_error::Not_existent;
@@ -339,12 +335,7 @@ Thread::check_sender(Thread *sender, bool timeout)
     }
 
   sender->set_wait_queue(sender_list());
-  // TOMO: ugly, because we walk C->SC :(
-  // idea: do_ipc (with partner) is always initiated from the sender
-  // means: we always run with the sender's sched context.
-  // means: we can take prio and stuff from SC_Scheduler::get_current.
-  sender->sender_enqueue(sender_list(), sender->sched()->prio());
-  //sender->sender_enqueue(sender_list(), SC_Scheduler::get_current()->prio());
+  sender->sender_enqueue(sender_list(), sender->sched_context()->prio());
   vcpu_set_irq_pending();
   return Check_sender::Queued;
 }
@@ -387,35 +378,18 @@ Thread::setup_timer(L4_timeout timeout, Utcb const *utcb, Timeout *timer)
 
 
 PRIVATE inline NEEDS["timer.h"]
-void Thread::goto_sleep(L4_timeout const &t, Sender * /*sender*/, Utcb *utcb)
+void Thread::goto_sleep(L4_timeout const &t, Sender *sender, Utcb *utcb)
 {
-  //(void)t;
-  //(void)sender;
-  //(void)utcb;
-  //panic("Thread::goto_sleep: sc not available here\n");
-
-  // TOMO: this function is on the IPC path.
-  // -> legacy implementation updates the ready queue lazily
-  //    (the blocked sc is not immediately removed from the ready queue)
-
+  (void)sender;
   IPC_timeout timeout;
 
   state_del_dirty(Thread_ready);
   setup_timer(t, utcb, &timeout);
 
-  // TOMO: why is this here?
   //if (sender == this)
-  //{
-  //  //switch_sched(sched(), &Sched_context::rq.current());
-  //  //switch_sched(sched(), &Ready_queue::rq.current());
-  //  panic("IPC goto_sleep");
-  //  //switch_sched(this, &Ready_queue::rq.current());
-  //}
+  //  switch_sched(sched(), &Ready_queue::rq.current());
 
-  if (M_IPC_DEBUG) printf("IPC> C[%p]: going to sleep because IPC partner is not ready.\n", this);
-  //SC_Scheduler::schedule(true);
   schedule();
-  if (M_IPC_DEBUG) printf("IPC> C[%p]: waking up because IPC partner unblocked me.\n", this);
 
   reset_timeout();
 
@@ -486,35 +460,20 @@ bool
 Thread::activate_ipc_partner(Thread *partner, Cpu_number current_cpu,
                              bool do_switch, bool closed_wait)
 {
-  //(void)partner;
-  //(void)current_cpu;
-  //(void)do_switch;
-  //(void)closed_wait;
-  //panic("Thread::activate_ipc_partner: sc not available here\n");
   if (partner->home_cpu() == current_cpu)
-  {
-    //auto &rq = Sched_context::rq.current();
-    //Sched_context *cs = rq.current_sched();
-    //Sched_context *cs = SC_Scheduler::get_current();
-    Ready_queue &rq { Ready_queue::rq.current() };
-    //Sched_context *cs = rq.current_sched();
-    Sched_context *cs = rq.current();
-    do_switch = do_switch && (closed_wait || cs != sched());
-    partner->state_change_dirty(~Thread_ipc_transfer, Thread_ready);
-    // TOMO: we disable the direct switch via switch_exec_locked,
-    //       because this would not set ready_queue::current.
-    //       We need the ready_queue otherwise sched_context activation/
-    //       deactivation would not work correctly.
-    if (do_switch)
-      {
-        schedule_if(switch_exec_locked(partner, Not_Helping) != Switch::Ok);
-        //if (switch_exec_locked(partner, Not_Helping) != Switch::Ok)
-        //  SC_Scheduler::schedule(false);
-        return true;
-      }
-    else
-      return deblock_and_schedule(partner);
-  }
+    {
+      auto &rq = Ready_queue::rq.current();
+      Sched_context *cs = rq.current();
+      do_switch = do_switch && (closed_wait || cs != sched());
+      partner->state_change_dirty(~Thread_ipc_transfer, Thread_ready);
+      if (do_switch)
+        {
+          schedule_if(switch_exec_locked(partner, Not_Helping) != Switch::Ok);
+          return true;
+        }
+      else
+        return deblock_and_schedule(partner);
+    }
 
   partner->xcpu_state_change(~Thread_ipc_transfer, Thread_ready);
   return false;
@@ -560,7 +519,6 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
 
   prepare_receive(sender, have_receive ? regs : 0);
   bool activate_partner = false;
-  //bool deblock_partner = false;
   Cpu_number current_cpu = ::current_cpu();
 
   if (partner)
@@ -620,7 +578,6 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
             partner->reset_timeout();
 
           ok = transfer_msg(tag, partner, rights, result.is_open_wait());
-          if (M_IPC_DEBUG) printf("IPC> transfering IPC message...\n");
 
           // transfer is also a possible migration point
           current_cpu = ::current_cpu();
@@ -630,11 +587,7 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
           if (ok && have_receive)
             state_add_dirty(Thread_receive_wait);
 
-          // TOMO: activate partner is an optimization.
-          // we turn that off for now...
           activate_partner = partner != this;
-          // TOMO: however, we need to deblock the partner:
-          //deblock_partner = partner != this;
           break;
         }
 
@@ -672,14 +625,6 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
       if (have_receive && !next)
         next = get_next_sender(sender);
     }
-  //if (deblock_partner)
-  //{
-  //  //printf("i am unblocking my IPC partner\n");
-  //  partner->xcpu_state_change(~Thread_ipc_transfer, Thread_ready);
-  //  assert(partner->sched());
-  //  //printf("partners sched context: addr=%p prio=%d\n", partner->sched(), partner->sched()->prio());
-  //  SC_Scheduler::deblock(partner->sched());
-  //}
 
   if (next)
     {
@@ -690,11 +635,6 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
   else if (have_receive)
     {
       if ((state() & Thread_full_ipc_mask) == Thread_receive_wait)
-        // TOMO: we broke the IPC fastpath.
-        // moe goes to sleep here because he expects an immediate answer to his page-fault.
-        // however, he also expects the fastpath to directly switch to sigma0 after ipc message has been transfered.
-        // for this reason, this function does not take care to deblock sigma0 here.
-        // but we expect it for now.
         goto_sleep(t.rcv, sender, utcb().access(true));
     }
 
@@ -710,7 +650,6 @@ Thread::do_ipc(L4_msg_tag const &tag, Mword from_spec, Thread *partner,
     {
       state_del_dirty(Thread_ready);
       schedule();
-      //SC_Scheduler::schedule(true);
       state = this->state();
    }
 
@@ -1283,7 +1222,7 @@ Thread::set_ipc_send_rights(L4_fpage::Rights c)
   _ipc_send_rights = c;
 }
 
-PRIVATE //inline NOEXPORT
+PRIVATE inline NOEXPORT
 bool
 Thread::remote_ipc_send(Ipc_remote_request *rq)
 {
@@ -1300,8 +1239,6 @@ Thread::remote_ipc_send(Ipc_remote_request *rq)
          rq->timeout);
 #endif
 
-  //(void)rq;
-  //panic("Thread::remote_ipc_send: sc not available here\n");
   Check_sender r = rq->partner->check_sender(this, rq->timeout);
   switch (r.s)
     {
@@ -1323,7 +1260,7 @@ Thread::remote_ipc_send(Ipc_remote_request *rq)
 
   // trigger remote_ipc_receiver_ready path, because we may need to grab locks
   // and this is forbidden in a DRQ handler. So transfer the IPC in usual
-  // thread code. However, this induces an overhead of two extra IPIs.
+  // thread code. However, this induces a overhead of two extra IPIs.
   if (rq->tag.items())
     {
       //LOG_MSG_3VAL(rq->partner, "pull", dbg_id(), 0, 0);
@@ -1342,8 +1279,6 @@ Thread::remote_ipc_send(Ipc_remote_request *rq)
   rq->result = success ? Check_sender::Done : Check_sender::Failed;
   rq->partner->state_change_dirty(~Thread_ipc_mask, Thread_ready);
   if (rq->partner->home_cpu() == current_cpu() && current() != rq->partner)
-    //Sched_context::rq.current().ready_enqueue(rq->partner->sched());
-    //Ready_queue::rq.current().ready_enqueue(rq->partner->sched());
     Ready_queue::rq.current().ready_enqueue(rq->partner->sched());
 
   return true;
