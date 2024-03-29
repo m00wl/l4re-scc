@@ -551,7 +551,8 @@ int __pthread_mgr_create_thread(pthread_descr thread, char **tos,
   // needed by __alloc_thread_sem
   thread->p_th_cap = _t.cap();
 
-  err = l4_error(e->factory()->create(_s.get()) << l4_mword_t(L4::Sched_constraint::Type::Budget_sc));
+  //err = l4_error(e->factory()->create(_s.get()) << l4_mword_t(L4_SCHED_CONSTRAINT_TYPE_BUDGET));
+  err = l4_error(e->factory()->create(_s.get()) << l4_mword_t(L4_SCHED_CONSTRAINT_TYPE_QUANT));
   if (err < 0)
     return err;
 

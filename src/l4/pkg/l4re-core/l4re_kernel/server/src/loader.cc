@@ -315,7 +315,8 @@ bool Loader::start(Cap<Dataspace> bin, Region_map *rm, l4re_aux_t *aux)
 
   chksys(env->factory()->create(app_thread), "create app thread");
 
-  chksys(env->factory()->create(app_sc) << l4_mword_t(L4::Sched_constraint::Type::Budget_sc), "create app budget sc");
+  //chksys(env->factory()->create(app_sc) << l4_mword_t(L4_SCHED_CONSTRAINT_TYPE_BUDGET), "create app budget sc");
+  chksys(env->factory()->create(app_sc) << l4_mword_t(L4_SCHED_CONSTRAINT_TYPE_QUANT), "create app budget sc");
 
   l4_debugger_set_object_name(app_thread.cap(),
                               strrchr(aux->binary, '/')

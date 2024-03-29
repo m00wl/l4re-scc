@@ -60,7 +60,7 @@ void sc_funct()
   L4Re::chkcap(sc, "sched_constraint cap alloc");
 
   auto cs = f->create(sc);
-  cs << l4_umword_t(L4::Sched_constraint::Type::Timer_window_sc);
+  cs << l4_umword_t(L4_SCHED_CONSTRAINT_TYPE_TIMER_WINDOW);
   cs << l4_umword_t(l4_kip_clock(l4re_kip()) + 5000000);
   cs << l4_umword_t(5000000);
   l4_msgtag_t r = cs;
@@ -135,7 +135,7 @@ void sc_clean(void)
   L4Re::chkcap(sc, "sched_constraint cap alloc");
 
   auto cs = f->create(sc);
-  cs << l4_umword_t(L4::Sched_constraint::Type::Timer_window_sc);
+  cs << l4_umword_t(L4_SCHED_CONSTRAINT_TYPE_TIMER_WINDOW);
   cs << l4_umword_t(l4_kip_clock(l4re_kip()) + 5000000);
   cs << l4_umword_t(10000000);
   l4_msgtag_t r = cs;
