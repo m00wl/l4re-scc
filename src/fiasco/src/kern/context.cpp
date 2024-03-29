@@ -20,13 +20,12 @@ INTERFACE:
 #include <fiasco_defs.h>
 #include <cxx/function>
 #include "ready_queue_fp.h"
+#include "ready_queue.h"
 #include "sched_context.h"
 
 class Entry_frame;
 class Context;
 class Kobject_iface;
-class Sched_constraint;
-class Ready_queue;
 
 class Context_ptr
 {
@@ -745,6 +744,9 @@ Context::schedule()
   //assert (!Sched_context::rq.current().schedule_in_progress);
   assert (!Ready_queue::rq.current().schedule_in_progress);
 
+  // we give up the CPU as a helpee, so we have no helper anymore
+  if (EXPECT_FALSE(helper() != this))
+    set_helper(Not_Helping);
 
   // if we are a thread on a foreign CPU we must ask the kernel context to
   // schedule for us
@@ -791,7 +793,9 @@ Context::schedule()
       // Ensure ready-list sanity
       assert (next_to_run);
 
-      if (EXPECT_FALSE(!(next_to_run->state() & Thread_ready_mask)))
+      if (!(next_to_run->sched()->can_run()))
+        continue; // TOMO: or go to preemption point?
+      else if (EXPECT_FALSE(!(next_to_run->state() & Thread_ready_mask)))
         rq->ready_dequeue(next_to_run->sched());
       else switch (schedule_switch_to_locked(next_to_run))
         {
@@ -884,30 +888,30 @@ Context::change_prio_to(Unsigned8 p)
     Ready_queue::rq.cpu(home_cpu()).ready_enqueue(sched());
 }
 
-PUBLIC
-void
-Context::switch_sched_context(Context *to)
-{
-  Context *from { helper() };
-
-  // The old thread gives up the CPU as a helpee, so it has no helper anymore.
-  if (EXPECT_FALSE(from != this))
-    set_helper(Not_Helping);
-
-  // Don't switch the scheduling context, if the old thread is helping the
-  // new one.
-  if (EXPECT_FALSE(to->helper() == this))
-  {
-    printf("\033[1;31mC[%p] is helping C[%p]\033[0m\n", this, to);
-    return;
-  }
-
-  // The old thread might have had a helper and might run with their
-  // scheduling context.
-  // Be sure to deactivate the correct scheduling context here.
-  from->sched()->deactivate();
-  to->sched()->activate();
-}
+//PUBLIC
+//void
+//Context::switch_sched_context(Context *to)
+//{
+//  Context *from { helper() };
+//
+//  // The old thread gives up the CPU as a helpee, so it has no helper anymore.
+//  if (EXPECT_FALSE(from != this))
+//    set_helper(Not_Helping);
+//
+//  // Don't switch the scheduling context, if the old thread is helping the
+//  // new one.
+//  if (EXPECT_FALSE(to->helper() == this))
+//  {
+//    printf("\033[1;31mC[%p] is helping C[%p]\033[0m\n", this, to);
+//    return;
+//  }
+//
+//  // The old thread might have had a helper and might run with their
+//  // scheduling context.
+//  // Be sure to deactivate the correct scheduling context here.
+//  from->sched()->deactivate();
+//  to->sched()->activate();
+//}
 
 // queue operations
 
@@ -1158,9 +1162,10 @@ Context::switch_exec_locked(Context *t, enum Helping_mode mode = Not_Helping)
       return Switch::Failed;
     }
 
+  // TOMO: we moved this to schedule() to avoid the overhead during IPC.
   // Can only switch to threads with valid sched_context.
-  if (EXPECT_FALSE(!(t->sched()->can_run())))
-    return Switch::Failed;
+  //if (EXPECT_FALSE(!(t->sched()->can_run())))
+  //  return Switch::Failed;
 
   // Ensure kernel stack pointer is non-null if thread is ready
   assert (t->_kernel_sp);
@@ -1700,7 +1705,7 @@ Context::enqueue_drq(Drq *rq)
 
   bool do_sched = _drq_q.execute_request(rq, Drq_q::No_drop, true);
   if (   access_once(&_home_cpu) == current_cpu()
-      && (state() & Thread_ready_mask) && !in_ready_queue())
+      && (state() & Thread_ready_mask) && !sched()->is_queued())
     {
       //Sched_context::rq.current().ready_enqueue(sched());
       Ready_queue::rq.current().ready_enqueue(this);

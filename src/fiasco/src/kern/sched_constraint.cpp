@@ -448,7 +448,10 @@ Quant_sc::Quant_sc(Ram_quota *q)
 IMPLEMENT
 bool
 Quant_sc::Timeslice_timeout::expired()
-{ return true; }
+{
+  Ready_queue::rq.current().requeue(Ready_queue::rq.current().current());
+  return true;
+}
 
 PUBLIC
 void

@@ -57,7 +57,7 @@ Context::switch_cpu(Context *t)
   t->load_tpidrurw();
   t->load_tpidruro();
   // TOMO: this call must be added to other architectures' switch_cpu() as well.
-  switch_sched_context(t);
+  //switch_sched_context(t);
   arm_switch_gp_regs(t);
 }
 

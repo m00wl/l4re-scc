@@ -87,7 +87,7 @@ Kernel_thread::bootstrap()
   alloc_sched_constraints();
   sched()->print();
   sched()->migrate_to(current_cpu());
-  sched()->activate();
+  //sched()->activate();
   //// TOMO: assumption about SC here!
   //static_cast<Budget_sc *>(get_sched_context())->calc_and_schedule_next_repl();
   //Ready_queue::rq.current().set_idle(this->sched());

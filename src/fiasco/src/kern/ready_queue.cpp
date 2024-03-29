@@ -181,6 +181,9 @@ Ready_queue::set_current(Sched_context *scx)
   //tt->set(clock + static_cast<Budget_sc *>(c->get_sched_context())->get_left(), current_cpu());
 
   // Make this timeslice current
+  if (_current)
+    _current->deactivate();
+  scx->activate();
   activate(scx);
 
   LOG_SCHED_LOAD(scx);

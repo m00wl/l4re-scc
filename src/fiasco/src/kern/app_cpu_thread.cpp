@@ -104,7 +104,7 @@ App_cpu_thread::bootstrap(Mword resume)
     //// TOMO: assumption about SC here!
     //static_cast<Budget_sc *>(get_sched_context())->calc_and_schedule_next_repl();
     sched()->migrate_to(ccpu);
-    sched()->activate();
+    //sched()->activate();
     Ready_queue::rq.current().set_current(sched());
   }
 
