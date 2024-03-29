@@ -252,6 +252,21 @@ l4_scheduler_is_online_u(l4_cap_idx_t scheduler, l4_umword_t cpu,
                          l4_utcb_t *utcb) L4_NOTHROW;
 
 
+L4_INLINE l4_msgtag_t
+l4_scheduler_attach_sc(l4_cap_idx_t scheduler, l4_cap_idx_t thread,
+                       l4_cap_idx_t sc) L4_NOTHROW;
+
+L4_INLINE l4_msgtag_t
+l4_scheduler_attach_sc_u(l4_cap_idx_t scheduler, l4_cap_idx_t thread,
+                         l4_cap_idx_t sc, l4_utcb_t *utcb) L4_NOTHROW;
+
+L4_INLINE l4_msgtag_t
+l4_scheduler_set_prio(l4_cap_idx_t scheduler, l4_cap_idx_t thread,
+                      l4_uint8_t const prio) L4_NOTHROW;
+
+L4_INLINE l4_msgtag_t
+l4_scheduler_set_prio_u(l4_cap_idx_t scheduler, l4_cap_idx_t thread,
+                        l4_uint8_t const prio, l4_utcb_t *utcb) L4_NOTHROW;
 
 /**
  * Operations on the Scheduler object.
@@ -373,6 +388,33 @@ l4_scheduler_is_online_u(l4_cap_idx_t scheduler, l4_umword_t cpu,
   return s.map & 1;
 }
 
+L4_INLINE l4_msgtag_t
+l4_scheduler_attach_sc_u(l4_cap_idx_t scheduler, l4_cap_idx_t thread,
+                         l4_cap_idx_t sc, l4_utcb_t *utcb) L4_NOTHROW
+{
+  l4_msg_regs_t *m = l4_utcb_mr_u(utcb);
+  m->mr[0] = L4_SCHEDULER_ATTACH_SC_OP;
+  m->mr[1] = l4_map_obj_control(0, 0);
+  m->mr[2] = l4_obj_fpage(thread, 0, L4_CAP_FPAGE_RWS).raw;
+  m->mr[3] = l4_map_obj_control(0, 0);
+  m->mr[4] = l4_obj_fpage(sc, 0, L4_CAP_FPAGE_RWS).raw;
+
+  return l4_ipc_call(scheduler, utcb, l4_msgtag(L4_PROTO_SCHEDULER, 1, 2, 0), L4_IPC_NEVER);
+}
+
+L4_INLINE l4_msgtag_t
+l4_scheduler_set_prio_u(l4_cap_idx_t scheduler, l4_cap_idx_t thread,
+                        l4_uint8_t const prio, l4_utcb_t *utcb) L4_NOTHROW
+{
+  l4_msg_regs_t *m = l4_utcb_mr_u(utcb);
+  m->mr[0] = L4_SCHEDULER_SET_PRIO_OP;
+  m->mr[1] = prio;
+  m->mr[2] = l4_map_obj_control(0, 0);
+  m->mr[3] = l4_obj_fpage(thread, 0, L4_CAP_FPAGE_RWS).raw;
+
+  return l4_ipc_call(scheduler, utcb, l4_msgtag(L4_PROTO_SCHEDULER, 2, 1, 0), L4_IPC_NEVER);
+}
+
 
 L4_INLINE l4_msgtag_t
 l4_scheduler_info(l4_cap_idx_t scheduler, l4_umword_t *cpu_max,
@@ -407,4 +449,18 @@ L4_INLINE int
 l4_scheduler_is_online(l4_cap_idx_t scheduler, l4_umword_t cpu) L4_NOTHROW
 {
   return l4_scheduler_is_online_u(scheduler, cpu, l4_utcb());
+}
+
+L4_INLINE l4_msgtag_t
+l4_scheduler_attach_sc(l4_cap_idx_t scheduler, l4_cap_idx_t thread,
+                       l4_cap_idx_t sc) L4_NOTHROW
+{
+  return l4_scheduler_attach_sc_u(scheduler, thread, sc, l4_utcb());
+}
+
+L4_INLINE l4_msgtag_t
+l4_scheduler_set_prio(l4_cap_idx_t scheduler, l4_cap_idx_t thread,
+                      l4_uint8_t const prio) L4_NOTHROW
+{
+  return l4_scheduler_set_prio_u(scheduler, thread, prio, l4_utcb());
 }

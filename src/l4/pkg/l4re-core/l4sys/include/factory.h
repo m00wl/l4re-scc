@@ -29,6 +29,7 @@
 #include <l4/sys/compiler.h>
 #include <l4/sys/types.h>
 #include <l4/sys/utcb.h>
+#include <l4/sys/sched_constraint.h>
 
 /**
  * \defgroup l4_factory_api Factory
@@ -261,6 +262,15 @@ L4_INLINE l4_msgtag_t
 l4_factory_create_vm_u(l4_cap_idx_t factory,
                        l4_cap_idx_t target_cap, l4_utcb_t *utcb) L4_NOTHROW;
 
+L4_INLINE l4_msgtag_t
+l4_factory_create_sc(l4_cap_idx_t factory, l4_cap_idx_t target_cap,
+                     enum L4_sched_constraint_type type) L4_NOTHROW;
+
+L4_INLINE l4_msgtag_t
+l4_factory_create_sc_u(l4_cap_idx_t factory, l4_cap_idx_t target_cap,
+                       enum L4_sched_constraint_type type,
+                       l4_utcb_t *utcb) L4_NOTHROW;
+
 /**
  * \internal
  * \ingroup l4_factory_api
@@ -423,6 +433,17 @@ l4_factory_create_vm_u(l4_cap_idx_t factory,
   return l4_factory_create_u(factory, L4_PROTO_VM, target_cap, u);
 }
 
+L4_INLINE l4_msgtag_t
+l4_factory_create_sc_u(l4_cap_idx_t factory, l4_cap_idx_t target_cap,
+                       enum L4_sched_constraint_type type,
+                       l4_utcb_t *u) L4_NOTHROW
+{
+  l4_msgtag_t t;
+  t = l4_factory_create_start_u(L4_PROTO_SCHED_CONSTRAINT, target_cap, u);
+  l4_factory_create_add_uint_u(type, &t, u);
+  return l4_factory_create_commit_u(factory, t, u);
+}
+
 
 
 
@@ -470,6 +491,14 @@ l4_factory_create_vm(l4_cap_idx_t factory,
 {
   return l4_factory_create_vm_u(factory, target_cap, l4_utcb());
 }
+
+L4_INLINE l4_msgtag_t
+l4_factory_create_sc(l4_cap_idx_t factory, l4_cap_idx_t target_cap,
+                     enum L4_sched_constraint_type type) L4_NOTHROW
+{
+  return l4_factory_create_sc_u(factory, target_cap, type, l4_utcb());
+}
+
 
 L4_INLINE l4_msgtag_t
 l4_factory_create_start_u(long obj, l4_cap_idx_t target_cap,

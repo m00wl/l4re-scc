@@ -48,3 +48,47 @@ l4util_create_thread(l4_cap_idx_t id, l4_utcb_t *thread_utcb,
 
   return 0;
 }
+
+L4_CV long
+l4util_create_thread_sc(l4_cap_idx_t id, l4_cap_idx_t sc,
+                        l4_utcb_t *thread_utcb, l4_cap_idx_t factory,
+                        l4_umword_t pc, l4_umword_t sp, l4_cap_idx_t pager,
+                        l4_cap_idx_t task, l4_cap_idx_t scheduler,
+                        l4_sched_param_t scp, int run) L4_NOTHROW
+{
+  l4_msgtag_t res = l4_factory_create_thread(factory, id);
+  if (l4_error(res))
+    return l4_error(res);
+
+  l4_thread_control_start();
+  l4_thread_control_pager(pager);
+  l4_thread_control_bind(thread_utcb, task);
+  res = l4_thread_control_commit(id);
+  if (l4_error(res))
+    return l4_error(res);
+
+  res = l4_scheduler_set_prio(scheduler, id, scp.prio);
+  if (l4_error(res))
+    return l4_error(res);
+
+  res = l4_factory_create_sc(factory, sc, L4_SCHED_CONSTRAINT_TYPE_QUANT);
+  if (l4_error(res))
+    return l4_error(res);
+
+  res = l4_scheduler_attach_sc(scheduler, id, sc);
+  if (l4_error(res))
+    return l4_error(res);
+
+  res = l4_thread_ex_regs(id, pc, sp, 0);
+  if (l4_error(res))
+    return l4_error(res);
+
+  if (run)
+    {
+      res = l4_scheduler_run_thread(scheduler, id, &scp);
+      if (l4_error(res))
+        return l4_error(res);
+    }
+
+  return 0;
+}

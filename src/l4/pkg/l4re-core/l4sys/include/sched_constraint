@@ -9,18 +9,7 @@
 
 namespace L4 {
 
-class Sched_constraint
-{
-public:
-  enum Type
-  {
-    Cond_sc,
-    Quant_sc,
-    Budget_sc,
-    Timer_window_sc,
-  };
-
-};
+class Sched_constraint {};
 
 class L4_EXPORT Budget_sc :
   public Sched_constraint,

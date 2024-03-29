@@ -50,6 +50,13 @@ l4util_create_thread(l4_cap_idx_t id, l4_utcb_t *thread_utcb,
                      l4_cap_idx_t task,
                      l4_cap_idx_t scheduler, l4_sched_param_t scp) L4_NOTHROW;
 
+L4_CV long
+l4util_create_thread_sc(l4_cap_idx_t id, l4_cap_idx_t sc,
+                        l4_utcb_t *thread_utcb, l4_cap_idx_t factory,
+                        l4_umword_t pc, l4_umword_t sp, l4_cap_idx_t pager,
+                        l4_cap_idx_t task, l4_cap_idx_t scheduler,
+                        l4_sched_param_t scp, int run) L4_NOTHROW;
+
 EXTERN_C_END
 
 #ifndef L4UTIL_THREAD_FUNC
