@@ -479,7 +479,7 @@ Context::Context()
   _current_scx(&_scx)
 {
   _home_cpu = Cpu::invalid();
-  printf("C[%p]: created\n", this);
+  //printf("C[%p]: created\n", this);
 }
 
 PUBLIC inline
@@ -815,7 +815,8 @@ Context::schedule()
           continue; // may have been migrated...
         }
 
-      rq->schedule_in_progress = sched();
+
+      rq->schedule_in_progress = this;
       Proc::preemption_point();
       if (EXPECT_TRUE(current_cpu == ::current_cpu()))
         rq->schedule_in_progress = 0;

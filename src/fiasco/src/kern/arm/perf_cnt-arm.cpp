@@ -225,7 +225,7 @@ IMPLEMENTATION [arm && perf_cnt]:
 
 #include <cstdio>
 #include "static_init.h"
-#include "tb_entry.h"
+//#include "tb_entry.h"
 
 Perf_cnt::Perf_read_fn Perf_cnt::read_pmc[Max_slot] =
 { dummy_read_pmc, dummy_read_pmc };
@@ -350,7 +350,7 @@ Perf_cnt::setup_pmc(Mword slot, Mword event, Mword, Mword, Mword)
 
   set_event_type(slot, event);
 
-  Tb_entry::set_rdcnt(slot, read_pmc[slot]);
+  //Tb_entry::set_rdcnt(slot, read_pmc[slot]);
 
   return 1;
 }

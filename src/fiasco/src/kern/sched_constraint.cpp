@@ -211,12 +211,14 @@ Sched_constraint::Sched_constraint(Ram_quota *q)
 : _quota(q),
   _run(false),
   _dying(false)
-{ printf("SC[%p]: created\n", this); }
+{
+  //printf("SC[%p]: created\n", this);
+}
 
 PUBLIC
 Sched_constraint::~Sched_constraint()
 {
-  printf("SC[%p]: delete\n", this);
+  //printf("SC[%p]: delete\n", this);
   assert(ref_cnt() == 0);
 }
 
@@ -471,6 +473,7 @@ PUBLIC
 void
 Quant_sc::activate() override
 {
+  //printf("QSC[%p]: activate\n", this);
   Unsigned64 clock = Timer::system_clock();
   _tt.set(clock + _left, current_cpu());
 }
@@ -710,6 +713,7 @@ PUBLIC static
 Timer_window_sc *
 Timer_window_sc::create(Ram_quota *q, L4_msg_tag t, Utcb const *u)
 {
+  (void)t;
   assert(t.words() == 7);
 
   Unsigned64 start = u->values[4];

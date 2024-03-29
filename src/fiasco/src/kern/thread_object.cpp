@@ -563,13 +563,11 @@ Thread_object::ex_regs(Address ip, Address sp,
 
   if (ops & Exr_trigger_exception)
     {
-      printf("exr trigger exc\n");
       extern char leave_by_trigger_exception[];
       do_trigger_exception(regs(), leave_by_trigger_exception);
     }
   else if (ops & Exr_trigger_sched_exception)
     {
-      printf("exr trigger sched exc\n");
       extern char leave_by_trigger_sched_exception[];
       do_trigger_exception(regs(), leave_by_trigger_sched_exception);
     }

@@ -35,7 +35,7 @@ setup:
 	  echo ;                                                                        \
 	fi
 
-build_all: build_fiasco build_l4re build_l4linux build_images
+build_all: build_fiasco build_l4re #build_l4linux build_images
 
 #.NOTPARALLEL: build_fiasco build_l4re build_l4linux build_images build_all
 

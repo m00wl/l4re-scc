@@ -265,12 +265,12 @@ PUBLIC
 void
 Sched_context::print() const
 {
-  printf("SCX[%p]\n", this);
-  printf("|- prio: %d\n", _prio);
-  printf("|- list: ");
-  for (Sched_constraint *sc : _list)
-    printf("SC[%p]-", sc);
-  printf(">\n");
+  //printf("SCX[%p]\n", this);
+  //printf("|- prio: %d\n", _prio);
+  //printf("|- list: ");
+  //for (Sched_constraint *sc : _list)
+  //  printf("SC[%p]-", sc);
+  //printf(">\n");
 }
 
 PUBLIC

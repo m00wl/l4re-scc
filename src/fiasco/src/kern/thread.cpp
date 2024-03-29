@@ -1330,7 +1330,7 @@ Thread::migrate_away(Migration *inf, bool remote)
                       : Ready_queue::rq.cpu(home_cpu());
 
       // if we are in the middle of the scheduler, leave it now
-      if (rq.schedule_in_progress == sched())
+      if (rq.schedule_in_progress == this)
         rq.schedule_in_progress = 0;
 
       rq.ready_dequeue(sched());

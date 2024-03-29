@@ -9,6 +9,8 @@ INTERFACE:
 #include "per_cpu_data.h"
 #include "sched_context.h"
 
+#include <cstdio>
+
 class Ready_queue
 {
 public:
@@ -54,7 +56,22 @@ public:
     dequeue(scx);
   }
 
-  Sched_context *schedule_in_progress;
+  //void switch_sched(Sched_context *from, Sched_context *to)
+  //{
+  //  assert (cpu_lock.test());
+
+  //  // If we're leaving the global timeslice, invalidate it This causes
+  //  // schedule() to select a new timeslice via set_current_sched()
+  //  if (from == current())
+  //    invalidate_current();
+
+  //  if (from->is_queued())
+  //    dequeue(from);
+
+  //  enqueue(to, false);
+  //}
+
+  Context *schedule_in_progress;
 
 private:
     typedef cxx::Sd_list<Sched_context> Queue;
@@ -101,7 +118,7 @@ Ready_queue::enqueue(Sched_context *scx, bool is_current)
 
   queue[prio].push(scx, is_current? Queue::Front : Queue::Back);
 
-  _c++;
+  //_c++;
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[addr: %p, entries: %d]: enqueue SCX[%p]\n", this, _c, scx);
 }
 
@@ -124,7 +141,7 @@ Ready_queue::dequeue(Sched_context *scx)
 
   while (queue[prio_highest].empty() && prio_highest)
     prio_highest--;
-  _c--;
+  //_c--;
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> RQ[addr: %p, entries: %d]: dequeue SCX[%p]\n", this, _c, scx);
 }
       
