@@ -303,7 +303,7 @@ config UX_NET
 
 config SCX_MAX_SC
 	int "Maximal number of SCs per Thread"
-	range 1 16
+	range 1 64
 	default 4
 	help
 	  The maximum number of scheduling-constraints that can be attached to a
