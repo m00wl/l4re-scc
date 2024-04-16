@@ -1,0 +1,3 @@
+requires: stdlibs
+provides: pointer-chasing
+maintainer: moritz.lumme@kernkonzept.com
