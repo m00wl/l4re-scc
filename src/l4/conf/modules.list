@@ -54,6 +54,15 @@ modaddr 0x01100000
 default-kernel fiasco -serial_esc
 default-bootstrap bootstrap
 
+entry ffmpeg-decoder
+roottask moe rom/ffmpeg-decoder.cfg
+module l4re
+module ned
+module ffmpeg_decoder
+module ffmpeg-decoder.cfg
+module /home/mlumme/Videos/short.mp4
+module pointer-chasing
+
 entry hello
 roottask moe --init=rom/hello
 module l4re

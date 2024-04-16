@@ -35,6 +35,7 @@
             pkgs.bison
             pkgs.dtc
             pkgs.ubootTools
+            pkgs.nasm
             # run
             pkgs.qemu
           ];
