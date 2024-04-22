@@ -190,6 +190,18 @@ Perf_cnt::read_counter(int counter_nr)
 }
 
 PUBLIC static
+void
+Perf_cnt::write_counter(unsigned counter_nr, Mword val)
+{
+  if (!is_avail())
+    return;
+  if (counter_nr > static_cast<unsigned>(_nr_counters))
+    return;
+  pmnxsel(counter_nr);
+  pmcnt(val);
+}
+
+PUBLIC static
 unsigned
 Perf_cnt::mon_event_type(int nr)
 {
@@ -210,11 +222,11 @@ Perf_cnt::init_cpu()
 
   _nr_counters = (pmcr() >> 11) & 0x1f;
 
-  pmcr(PMNC_ENABLE | PMNC_PERF_RESET | PMNC_CNT_RESET);
+  pmcr(PMNC_ENABLE | PMNC_PERF_RESET | PMNC_CNT_RESET | PMNC_CNT_LC);
 
   cntens((1ul << 31) | ((1ul << _nr_counters) - 1));
 
-  //set_event_type(0, 8);
+  pmccfilt((1 << 31));
 
   // allow user to access events
   useren(1);
@@ -308,6 +320,18 @@ Perf_cnt::init()
   // Don't use PMCCNT_EL0 as time stamp counter.
   // Use the default generic ARM timer instead.
   // Tb_entry::set_cycle_read_func(read_cycle_cnt);
+
+  //setup_pmc(2, 0x11, 0xC0DE, 0xC0DE, 0xC0DE);
+  //setup_pmc(3, 0x08, 0xC0DE, 0xC0DE, 0xC0DE);
+
+  //Mword val;
+  //asm volatile ("mrs %0, PMEVTYPER2_EL0" : "=r" (val));
+  //val = (val | (1 << 31)) & ~(1 << 30);
+  //asm volatile ("msr PMEVTYPER2_EL0, %0" : : "r" (val));
+
+  //asm volatile ("mrs %0, PMEVTYPER3_EL0" : "=r" (val));
+  //val = (val | (1 << 31)) & ~(1 << 30);
+  //asm volatile ("msr PMEVTYPER3_EL0, %0" : : "r" (val));
 }
 
 PUBLIC static inline NEEDS[Perf_cnt::init_cpu] FIASCO_INIT_CPU
@@ -345,12 +369,31 @@ PUBLIC static
 int
 Perf_cnt::setup_pmc(Mword slot, Mword event, Mword, Mword, Mword)
 {
-  if (slot >= Max_slot)
-    return 0;
+  //if (slot >= Max_slot)
+  //  return 0;
 
   set_event_type(slot, event);
 
   //Tb_entry::set_rdcnt(slot, read_pmc[slot]);
 
   return 1;
+}
+
+PUBLIC static
+int
+Perf_cnt::enable_oflow_irq(unsigned counter_nr)
+{
+  if (!is_avail())
+    return 0;
+  if (counter_nr > static_cast<unsigned>(_nr_counters))
+    counter_nr = 31;
+  intens(1 << counter_nr);
+  return 1;
+}
+
+PUBLIC static
+void
+Perf_cnt::ack_oflow_irq(unsigned counter_nr)
+{
+  flag(1 << counter_nr);
 }

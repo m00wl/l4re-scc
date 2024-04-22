@@ -42,3 +42,4 @@ clock_IMPL            += clock-generic
 ipi_IMPL              += ipi-arm-rpi
 platform_control_IMPL += platform_control-arm-rpi
 irq_handler_IMPL       = irq_handler-arm-rpi
+mbwp_IMPL             += mbwp-arm-rpi

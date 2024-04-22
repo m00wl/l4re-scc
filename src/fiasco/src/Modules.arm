@@ -148,7 +148,7 @@ INTERFACES_KERNEL += 	__main mem_op kmem_space boot_uart_init     \
 			irq_chip_generic bootstrap                  \
 			outer_cache utcb_support                    \
 			irq_mgr_multi_chip smc_call psci mem_chunk  \
-      ready_queue
+      ready_queue mbwp
 
 INTERFACES_KERNEL-$(CONFIG_ARM_ACPI) += acpi acpi_fadt
 INTERFACES_KERNEL-$(CONFIG_ARM_MPCORE) += scu
@@ -200,6 +200,7 @@ kernel_thread_IMPL	:= kernel_thread kernel_thread-std kernel_thread-arm \
 			   kernel_thread-arm-$(BITS)
 kernel_uart_IMPL  	:= kernel_uart kernel_uart-libuart
 map_util_IMPL		:= map_util map_util-mem map_util-objs
+mbwp_IMPL		:= mbwp mbwp-arm
 mem_layout_IMPL		:= mem_layout mem_layout-arm-$(BITS) \
 			   mem_layout-arm mem_layout-noncont
 mem_op_IMPL		:= mem_op mem_op-arm-$(BITS)

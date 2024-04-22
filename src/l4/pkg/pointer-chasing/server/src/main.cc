@@ -16,7 +16,6 @@ using L4Re::chksys;
 using cxx::access_once;
 
 static constexpr auto N_THREADS = 1; 
-//static constexpr auto N_READS = 20000000;
 static constexpr auto N_READS = 16777216;
 static constexpr auto MEM_SIZE = 1073741824; // 1 GiB
 static constexpr auto CACHE_LINE_SIZE = 64;
@@ -51,13 +50,13 @@ void *benchmark_core(void *arg)
 
   //auto loc = ds_start;
 
-  //for (int i = 0; i < N_READS; i++)
-  for (;;)
+  for (int i = 0; i < N_READS; i++)
+  //volatile int endless = 1;
+  //while (endless)
   {
+    //l4_sleep_forever();
     auto loc = ds_start + uid(dre);
     res += access_once(reinterpret_cast<l4_uint64_t *>(loc));
-    //if (i % 100000 == 0)
-    //  printf("%lu", n);
     //loc += 64;
   }
 
@@ -108,6 +107,7 @@ int main(void)
     sp.affinity.set(0, i);
     sp.affinity.map = 1;
     L4::Cap<L4::Thread> t(pthread_l4_cap(threads[i]));
+    s->set_prio(t, 255);
     s->run_thread(t, sp);
   }
 

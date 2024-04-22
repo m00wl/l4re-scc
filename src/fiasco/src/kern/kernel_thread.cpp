@@ -46,6 +46,7 @@ IMPLEMENTATION:
 #include "watchdog.h"
 #include "sched_constraint.h"
 #include "ready_queue.h"
+#include "mbwp.h"
 
 /**
  * unit test interface
@@ -112,6 +113,7 @@ Kernel_thread::bootstrap()
   // timer loop calibration. The measurement intervals would be far too short.
   printf("Calibrating timer loop... ");
   Timer_tick::enable(current_cpu());
+  Mbwp::init();
   Proc::sti();
   Watchdog::enable();
   // Init delay loop, needs working timer interrupt

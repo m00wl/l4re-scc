@@ -412,6 +412,16 @@ config NO_LDT
 	  table (LDT).  This reduces some overhead. However, this
 	  also makes the use of the LDT in L4Linux impossible.
 
+config MBWP
+	bool "Enable Memory Bandwidth Partitioning" if !ONE_SHOT
+	depends on PERF_CNT
+	default n
+	help
+	  This option enables support for memory bandwidth partitioning in the
+	  kernel. A per-core read and write budget can be assigned and the kernel
+	  uses performance counters to ensure that no CPU core exceeds this
+	  bandwidth allocation within a scheduler tick.
+
 # PF_SECTION: KERNEL
 
 endmenu # kernel options

@@ -89,6 +89,7 @@ IMPLEMENTATION:
 #include <climits>
 #include "config.h"
 #include "kdb_ke.h"
+#include "mbwp.h"
 
 
 DEFINE_PER_CPU Per_cpu<Timeout_q> Timeout_q::timeout_queue;
@@ -278,7 +279,7 @@ Timeout::expire()
  * @return true if a reschedule is necessary, false otherwise.
  */
 PUBLIC inline NEEDS [<cassert>, <climits>, "kip.h", "timer.h", "config.h",
-                     Timeout::expire]
+                     Timeout::expire, "mbwp.h"]
 bool
 Timeout_q::do_timeouts()
 {
@@ -312,6 +313,8 @@ Timeout_q::do_timeouts()
 
   // ensure we always terminate
   assert((end >= 0) && (end < Wakeup_queue_count));
+
+  Mbwp::handle_period();
 
   if (M_TIMER_DEBUG) printf("TIMER> checking timeouts @ %llu\n", now);
   for (;;)

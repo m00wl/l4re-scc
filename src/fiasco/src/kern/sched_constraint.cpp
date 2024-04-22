@@ -312,6 +312,14 @@ Sched_constraint::wake_up_all_blocked()
 
 PUBLIC
 void
+Sched_constraint::release()
+{
+  set_run(true);
+  wake_up_all_blocked();
+}
+
+PUBLIC
+void
 Sched_constraint::invoke(L4_obj_ref, L4_fpage::Rights, Syscall_frame *f, Utcb *)
                   override
 {

@@ -1188,7 +1188,6 @@ PUBLIC
 Context::Switch
 Context::switch_exec_helping(Context *t, Mword const *lock, Mword val)
 {
-  panic("switch exec helping");
   // Must be called with CPU lock held
   assert (t);
   assert (cpu_lock.test());

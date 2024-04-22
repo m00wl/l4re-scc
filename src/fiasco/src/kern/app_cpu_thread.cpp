@@ -31,6 +31,7 @@ IMPLEMENTATION [mp]:
 #include "warn.h"
 #include "sched_constraint.h"
 #include "ready_queue.h"
+#include "mbwp.h"
 
 PUBLIC explicit inline
 App_cpu_thread::App_cpu_thread(Ram_quota *q)
@@ -113,6 +114,7 @@ App_cpu_thread::bootstrap(Mword resume)
 
   Scheduler::scheduler.trigger_hotplug_event();
   Timer_tick::enable(ccpu);
+  Mbwp::init();
   cpu_lock.clear();
 
   if (!resume)

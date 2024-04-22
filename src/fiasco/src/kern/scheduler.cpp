@@ -39,6 +39,7 @@ IMPLEMENTATION:
 #include "l4_buf_iter.h"
 #include "l4_types.h"
 #include "entry_frame.h"
+#include "mbwp.h"
 
 JDB_DEFINE_TYPENAME(Scheduler, "\033[34mSched\033[m");
 Scheduler Scheduler::scheduler;
@@ -111,6 +112,7 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
            cxx::int_value<Order>(sched_param->cpus.granularity()));
 
   //printf("\033[1;33mSCHEDULER> run_thread C[%p] (Warning: Prio/Timeslice in L4_sched_param ignored, use SC API instead)\033[0m\n", thread);
+  printf("\033[1;33mSCHEDULER> run_thread C[%p] on cpu %d\033[0m\n", thread, cxx::int_value<Cpu_number>(info.cpu));
   if (!thread->sched()->is_constrained())
   {
     printf("thread: %p\n", thread);
@@ -119,6 +121,10 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
       printf("SCHEDULER> trying to run thread %p whose sched_context has no sched_constraints attached.\n", thread);
     thread->alloc_sched_constraints();
   }
+
+  Sched_constraint *mbwp_sc = Mbwp::sc.cpu(info.cpu);
+  if (!thread->sched()->contains(mbwp_sc))
+    thread->sched()->attach(mbwp_sc);
 
   // TOMO: what happens if attach_sc fails?
   if (_global_sc)

@@ -1,9 +1,9 @@
 PKGDIR	?= ..
 L4DIR		?= $(PKGDIR)/../..
 
-TARGET	= $(if $(wildcard $(SRC_DIR)/do-build),ffmpeg_decoder)
+TARGET	= $(if $(wildcard $(SRC_DIR)/do-build),ffmpeg-bench-mem)
 
-$(if $(SYSTEM),$(if $(TARGET),,$(info ffmpeg_decoder not built because 'do-build' not there in $(SRC_DIR).)))
+$(if $(SYSTEM),$(if $(TARGET),,$(info ffmpeg-bench-mem not built because 'do-build' not there in $(SRC_DIR).)))
 
 FFMPEG_SRC 	= $(SRC_DIR)/ffmpeg-src
 FFMPEG_OBJ 	= $(OBJ_DIR)/ffmpeg-obj
@@ -16,14 +16,15 @@ BUILD_MODE	= decodeonly
 DEFINES_fb      = -DUSE_FB
 DEFINES_decodeonly = -DUSE_DECODEONLY
 
-LIBS		= -lavutil -lavformat -lavcodec -lswscale -lavutil -lswresample
+LIBS		= -lavutil -lavformat -lavcodec -lswscale -lavutil -lswresample \
+					-lavfilter
 REQUIRES_LIBS   = rtc libgfxbitmap libc_be_fs_noop zlib libc_be_math \
 		  libc_support_misc l4re_c-util libpthread
 DEPENDS_PKGS    = $(REQUIRES_LIBS)
 CFLAGS         += $(DEFINES_$(BUILD_MODE))
 PRIVATE_INCDIR  = $(FFMPEG_INST)/include
 PRIVATE_LIBDIR  = $(FFMPEG_INST)/lib
-SRC_C		= decoder.c
+SRC_C		= bench-mem.c
 
 include $(L4DIR)/mk/prog.mk
 
@@ -31,7 +32,7 @@ FFMPEG_OPTS_x86 =
 
 LDFLAGS += --no-warn-mismatch
 
-$(TARGET) $(SRC_DIR)/decoder.c: $(FFMPEG_INST)/lib/libavcodec.a
+$(TARGET) $(SRC_DIR)/bench-mem.c: $(FFMPEG_INST)/lib/libavcodec.a
 
 ARCH_MAP_$(ARCH)   = $(ARCH)
 ARCH_MAP_x86       = x86
