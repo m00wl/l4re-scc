@@ -137,13 +137,18 @@ Sched_proxy::info(l4_umword_t *cpu_max, l4_sched_cpu_set_t *cpus,
   return L4_EOK;
 }
 
-
+int n_threads = 0;
 int
 Sched_proxy::run_thread(L4::Cap<L4::Thread> thread, l4_sched_param_t const &sp)
 {
   l4_sched_param_t s = sp;
   s.prio = std::min(sp.prio + _prio_offset, (l4_umword_t)_prio_limit);
-  s.affinity = sp.affinity & _cpus;
+  //s.affinity = sp.affinity & _cpus;
+  if (n_threads > 3)
+  {
+    s.affinity.set(0, n_threads % 4);
+    s.affinity.map = 1;
+  }
   if (0)
     {
       printf("loader[%p] run_thread: o=%u scheduler affinity = %lx "
@@ -155,6 +160,7 @@ Sched_proxy::run_thread(L4::Cap<L4::Thread> thread, l4_sched_param_t const &sp)
              this, s.affinity.map, s.affinity.offset(),
              s.affinity.granularity());
     }
+  n_threads++;
   if (_global_sc.is_valid())
   {
     auto tag = L4Re::Env::env()->scheduler()->attach_sc(thread, _global_sc);

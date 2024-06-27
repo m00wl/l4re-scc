@@ -27,6 +27,7 @@
           packages = [
             # build
             pkgs.gcc
+            #pkgsArm64.buildPackages.gcc9
             pkgs.dialog
             pkgs.gawk
             pkgs.binutils
