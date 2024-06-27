@@ -1,0 +1,3 @@
+requires: stdlibs
+provides: calc-pi
+maintainer: moritz.lumme@kernkonzept.com
