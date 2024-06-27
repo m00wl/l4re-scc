@@ -5,7 +5,6 @@ INTERFACE:
 #include "types.h"
 #include "globals.h"
 #include "spin_lock.h"
-//#include "sched_constraint.h"
 
 #include <cxx/static_vector>
 #include <cxx/dlist>
@@ -41,10 +40,12 @@ class Sched_context : public cxx::D_list_item
 
 public:
   Context *context() const { return context_of(this); }
+  Unsigned64 left = Config::Default_time_slice;
 
 private:
   Unsigned8 _prio;
   //Spin_lock<> _lock;
+public:
   Sched_constraint *__scs[Config::Scx_max_sc] = { nullptr };
   typedef cxx::static_vector<Sched_constraint *, unsigned> Sc_list;
   Sc_list _list;
@@ -171,7 +172,7 @@ Sched_context::is_constrained() const
 //  _blocked_by = nullptr;
 //}
 
-PUBLIC
+PUBLIC inline
 bool
 Sched_context::can_run()
 {
@@ -212,6 +213,7 @@ Sched_context::deactivate() const
   {
     if (sc)
       sc->deactivate();
+      //reinterpret_cast<Quant_sc *>(sc)->perf_deactivate();
   }
 }
 
@@ -223,6 +225,7 @@ Sched_context::activate() const
   {
     if (sc)
       sc->activate();
+      //reinterpret_cast<Quant_sc *>(sc)->perf_activate();
   }
 }
 
@@ -320,7 +323,7 @@ Sched_context::detach(Sched_constraint *sc)
 
     if (sc->dying() && (sc->ref_cnt() == 0))
     {
-      sc->migrate_away();
+      //sc->migrate_away();
       delete sc;
     }
 
@@ -336,3 +339,21 @@ Sched_context::detach(Sched_constraint *sc)
   return false;
 }
 
+PUBLIC
+void
+Sched_context::detach_all()
+{
+  for (Sched_constraint *sc : _list)
+    if (sc)
+      detach(sc);
+}
+
+PUBLIC
+Sched_constraint *
+Sched_context::get_first_sc() const
+{
+  for (Sched_constraint *sc : _list)
+    if (sc) return sc;
+
+  return nullptr;
+}

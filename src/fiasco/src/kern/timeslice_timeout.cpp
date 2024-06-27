@@ -38,7 +38,8 @@ Timeslice_timeout::expired() override
 
   if (current)
   {
-    panic("legacy timeslice_timeout expired");
+    rq.requeue(current);
+    //panic("legacy timeslice_timeout expired");
     //// TOMO: assumption about SC here!
     //Budget_sc *b = static_cast<Budget_sc *>(current->get_sched_context());
     //b->timeslice_expired();

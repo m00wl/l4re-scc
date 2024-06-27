@@ -71,13 +71,13 @@ public:
   void set_quantum(Unsigned64 q)
   { _quantum = q; }
 
-  Unsigned64 get_left() const
+  Unsigned64 inline get_left() const
   { return _left; }
 
-  void set_left(Unsigned64 l)
+  void inline set_left(Unsigned64 l)
   { _left = l; }
 
-  void replenish()
+  void inline replenish()
   { set_left(_quantum); }
 
 private:
@@ -184,6 +184,30 @@ private:
 };
 
 // --------------------------------------------------------------------------
+INTERFACE [mbwp]:
+
+class Mbw_sc : public Sched_constraint
+{
+public:
+  Unsigned64 get_budget(unsigned counter) const
+  { return counter < 2 ? _budget[counter] : ~Unsigned64{0}; }
+private:
+  class Mbw_sc_timeout : public Timeout
+  {
+  public:
+    Mbw_sc_timeout(Mbw_sc *sc) : _sc(sc)
+    {}
+
+  private:
+    bool expired() override;
+    Mbw_sc *_sc;
+  };
+
+  Unsigned64 _budget[2];
+  Mbw_sc_timeout _timeout;
+};
+
+// --------------------------------------------------------------------------
 IMPLEMENTATION:
 
 #include <cassert>
@@ -200,6 +224,8 @@ IMPLEMENTATION:
 #include "ready_queue.h"
 #include "minmax.h"
 #include "thread_object.h"
+
+#include "timeslice_timeout.h"
 
 PUBLIC inline NEEDS[<cstddef>]
 void *
@@ -488,6 +514,32 @@ Quant_sc::activate() override
 
 PUBLIC
 void
+Quant_sc::perf_deactivate()
+{
+  //Unsigned64 clock = Timer::system_clock();
+  ////Signed64 left = _tt.get_timeout(clock);
+  ////_tt.reset();
+  //Signed64 left = timeslice_timeout.current()->get_timeout(clock);
+  timeslice_timeout.current()->reset();
+
+  //if (left > 0)
+  //  set_left(left);
+  //else
+    replenish();
+}
+
+PUBLIC
+void
+Quant_sc::perf_activate()
+{
+  //printf("QSC[%p]: activate\n", this);
+  Unsigned64 clock = Timer::system_clock();
+  //_tt.set(clock + _left, current_cpu());
+  timeslice_timeout.current()->set(clock + _left, current_cpu());
+}
+
+PUBLIC
+void
 Quant_sc::migrate_away() override
 {}
 
@@ -580,15 +632,10 @@ void
 Budget_sc::timeslice_expired()
 {
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> BSC[%p]: timeslice_expired\n", this);
-  printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>> BSC[%p]: deadline hit @ %llu\n", this, Timer::system_clock());
+ // printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>> BSC[%p]: deadline hit @ %llu\n", this, Timer::system_clock());
   set_run(false);
-  // TOMO: send exception to user thread here
-  Thread *t = ::current_thread();
-  //extern char leave_by_trigger_exception[];
-  //t->do_trigger_exception(t->regs(), leave_by_trigger_exception);
-  //t->send_exception(t->regs());
-  //t->send_sched_exception(t->regs());
-  static_cast<Thread_object *>(t)->ex_regs(~0UL, ~0UL, 0, 0, 0, Thread::Exr_trigger_sched_exception);
+  //Thread *t = ::current_thread();
+  //static_cast<Thread_object *>(t)->ex_regs(~0UL, ~0UL, 0, 0, 0, Thread::Exr_trigger_sched_exception);
 }
 
 PRIVATE
@@ -645,7 +692,7 @@ void
 Budget_sc::migrate_away() override
 {
   if (M_MIGRATION_DEBUG) printf("MIGRATION> BSC[%p]: migrate away\n", this);
-  //deactivate();
+  deactivate();
   _repl_timeout.reset();
 
   assert(!_oob_timeout.is_set());
@@ -828,5 +875,100 @@ Timer_window_sc::migrate_away() override
 PUBLIC
 void
 Timer_window_sc::migrate_to(Cpu_number) override
+{}
+
+// --------------------------------------------------------------------------
+IMPLEMENTATION [mbwp]:
+
+#include "mbwp.h"
+
+static Kmem_slab_t<Mbw_sc> _mbw_sc_allocator("Mbw_sc");
+
+PRIVATE static
+Mbw_sc::Self_alloc *
+Mbw_sc::allocator()
+{ return _mbw_sc_allocator.slab(); }
+
+PUBLIC inline
+void
+Mbw_sc::operator delete (void *ptr)
+{
+  Mbw_sc *sc = reinterpret_cast<Mbw_sc *>(ptr);
+  allocator()->q_free<Ram_quota>(sc->get_quota(), sc);
+}
+
+PUBLIC static
+Mbw_sc *
+Mbw_sc::create(Ram_quota *q, L4_msg_tag t, Utcb const *u)
+{
+  (void)t;
+  assert(t.words() == 7);
+
+  Unsigned64 read = u->values[4];
+  Unsigned64 write = u->values[6];
+
+  return create(q, read, write);
+}
+
+PUBLIC static
+Mbw_sc *
+Mbw_sc::create(Ram_quota *q, Unsigned64 r, Unsigned64 w)
+{
+  void *p = allocator()->q_alloc<Ram_quota>(q);
+  return p ? new (p) Mbw_sc(q, r, w) : 0;
+}
+
+PUBLIC
+Mbw_sc::Mbw_sc(Ram_quota *q, Unsigned64 r, Unsigned64 w)
+: Sched_constraint(q),
+  _timeout(this)
+{
+  _budget[0] = Mbwp::mbs_to_cache_events(r);
+  _budget[1] = Mbwp::mbs_to_cache_events(w);
+  set_run(true);
+}
+
+PUBLIC
+void
+Mbw_sc::set_timeout()
+{
+  Unsigned64 time { Timer::system_clock() };
+  time += Config::Scheduler_granularity;
+  _timeout.set(time, current_cpu());
+}
+
+IMPLEMENT
+bool
+Mbw_sc::Mbw_sc_timeout::expired()
+{
+  _sc->set_run(true);
+  // force reschedule.
+  return true;
+}
+
+PUBLIC
+void
+Mbw_sc::deactivate() override
+{
+  Ready_queue::rq.current().mbw_sc(nullptr);
+  Mbwp::reset_counters();
+}
+
+PUBLIC
+void
+Mbw_sc::activate() override
+{
+  Ready_queue::rq.current().mbw_sc(this);
+  Mbwp::reset_counters();
+}
+
+PUBLIC
+void
+Mbw_sc::migrate_away() override
+{}
+
+PUBLIC
+void
+Mbw_sc::migrate_to(Cpu_number) override
 {}
 

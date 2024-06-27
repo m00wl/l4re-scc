@@ -11,6 +11,8 @@ INTERFACE:
 
 #include <cstdio>
 
+class Mbw_sc;
+
 class Ready_queue
 {
 public:
@@ -74,11 +76,23 @@ public:
   Context *schedule_in_progress;
 
 private:
-    typedef cxx::Sd_list<Sched_context> Queue;
-    Unsigned8 prio_highest { 0 };
-    Queue queue[priorities];
+  typedef cxx::Sd_list<Sched_context> Queue;
+  Unsigned8 prio_highest { 0 };
+  Queue queue[priorities];
 
-    Sched_context *_current;
+  Sched_context *_current;
+};
+
+// --------------------------------------------------------------------------
+INTERFACE [mbwp]:
+
+EXTENSION class Ready_queue
+{
+public:
+  Mbw_sc *mbw_sc() const { return _mbw_sc; }
+  void mbw_sc(Mbw_sc *sc) { _mbw_sc = sc; }
+private:
+  Mbw_sc *_mbw_sc;
 };
 
 // --------------------------------------------------------------------------
@@ -88,6 +102,7 @@ IMPLEMENTATION:
 #include "panic.h"
 #include "std_macros.h"
 #include "logdefs.h"
+#include "sched_constraint.h"
 
 #include <cassert>
 
@@ -173,33 +188,47 @@ Ready_queue::set_current(Sched_context *scx)
   //// been invalidated
   //Timeout * const tt = timeslice_timeout.current();
   //Unsigned64 clock = Timer::system_clock();
-  //if (Sched_context *s = current())
+  //if (_current)
   //{
-  //  Signed64 left = tt->get_timeout(clock);
-  //  if (left > 0)
-  //    // TOMO: assumption about SC here!
-  //    static_cast<Budget_sc *>(s->get_sched_context())->set_left(left);
-  //  else
-  //  {
-  //    //s->get_quant_sc()->replenish();
-  //    printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>> BSC[%p]: budget overrun\n", s);
-  //    // TOMO: assumption about SC here!
-  //    static_cast<Budget_sc *>(s->get_sched_context())->set_left(0);
-  //  }
+  //  //Signed64 left = tt->get_timeout(clock);
+  //  ////Signed64 left = 0;
+  //  Quant_sc *sc = reinterpret_cast<Quant_sc *>(_current->__scs[0]);
+  //  //if (left > 0)
+  //  //  // TOMO: assumption about SC here!
+  //  //  //static_cast<Budget_sc *>(s->get_sched_context())->set_left(left);
+  //  //  //sc->set_left(left);
+  //  //  _current->left = left;
+  //  //else
+  //  //{
+  //  //  //s->get_quant_sc()->replenish();
+  //  //  //printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>> BSC[%p]: budget overrun\n", s);
+  //  //  // TOMO: assumption about SC here!
+  //  //  //static_cast<Budget_sc *>(s->get_sched_context())->set_left(0);
+  //  //  //sc->replenish();
+  //  //  _current->left = Config::Default_time_slice;
+  //  //}
+  //  sc->replenish();
+  //  
 
   //  LOG_SCHED_SAVE(s);
   //}
 
   //// Program new end-of-timeslice timeout
+  ////printf("SCX[%p]: programming timer\n", scx);
   //tt->reset();
-  //if (M_TIMER_DEBUG) printf("TIMER> setting timeslice timeout @ %llu\n", clock + static_cast<Budget_sc *>(c->get_sched_context())->get_left());
+  ////if (M_TIMER_DEBUG) printf("TIMER> setting timeslice timeout @ %llu\n", clock + static_cast<Budget_sc *>(c->get_sched_context())->get_left());
   ////tt->set(clock + c->get_budget_sc()->get_left(), current_cpu());
   //// TOMO: assumption about SC here!
-  //tt->set(clock + static_cast<Budget_sc *>(c->get_sched_context())->get_left(), current_cpu());
+  ////tt->set(clock + static_cast<Budget_sc *>(c->get_sched_context())->get_left(), current_cpu());
+  ////auto tmp = Config::Default_time_slice;
+  //tt->set(clock + reinterpret_cast<Quant_sc *>(scx->__scs[0])->get_left(), current_cpu());
+  ////tt->set(clock + scx->left, current_cpu());
 
   // Make this timeslice current
   if (_current)
+    //reinterpret_cast<Quant_sc *>(_current->__scs[0])->perf_deactivate();
     _current->deactivate();
+  //reinterpret_cast<Quant_sc *>(scx->__scs[0])->perf_activate();
   scx->activate();
   activate(scx);
 

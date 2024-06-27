@@ -30,6 +30,8 @@ private:
   L4_RPC(Info,      sched_info, (L4_cpu_set_descr set, Mword *rm,
                                  Mword *max_cpus, Mword *sched_classes));
   L4_RPC(Idle_time, sched_idle, (L4_cpu_set cpus, Cpu_time *time));
+
+  void sys_run_call_in(Thread *);
 };
 
 // ----------------------------------------------------------------------------
@@ -57,6 +59,10 @@ Scheduler::Scheduler() : _irq(0), _global_sc(0)
   initial_kobjects.register_obj(this, Initial_kobjects::Scheduler);
 }
 
+IMPLEMENT_DEFAULT inline
+void
+Scheduler::sys_run_call_in(Thread *)
+{}
 
 PRIVATE
 L4_msg_tag
@@ -112,7 +118,7 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
            cxx::int_value<Order>(sched_param->cpus.granularity()));
 
   //printf("\033[1;33mSCHEDULER> run_thread C[%p] (Warning: Prio/Timeslice in L4_sched_param ignored, use SC API instead)\033[0m\n", thread);
-  printf("\033[1;33mSCHEDULER> run_thread C[%p] on cpu %d\033[0m\n", thread, cxx::int_value<Cpu_number>(info.cpu));
+  //printf("\033[1;33mSCHEDULER> run_thread C[%p] on cpu %d\033[0m\n", thread, cxx::int_value<Cpu_number>(info.cpu));
   if (!thread->sched()->is_constrained())
   {
     printf("thread: %p\n", thread);
@@ -122,9 +128,10 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
     thread->alloc_sched_constraints();
   }
 
-  Sched_constraint *mbwp_sc = Mbwp::sc.cpu(info.cpu);
-  if (!thread->sched()->contains(mbwp_sc))
-    thread->sched()->attach(mbwp_sc);
+  sys_run_call_in(thread);
+  //Sched_constraint *mbwp_sc = Mbwp::sc.cpu(info.cpu);
+  //if (!thread->sched()->contains(mbwp_sc))
+  //  thread->sched()->attach(mbwp_sc);
 
   // TOMO: what happens if attach_sc fails?
   if (_global_sc)
@@ -214,6 +221,7 @@ Scheduler::sys_detach_sc(Syscall_frame *f, Utcb const *utcb)
 
   if (!thread->sched()->detach(sc))
     return commit_result(-L4_err::ENoent);
+  //thread->sched()->detach_all();
   thread->sched()->print();
 
   return commit_result(0);
@@ -366,3 +374,16 @@ Scheduler::kinvoke(L4_obj_ref ref, L4_fpage::Rights rights, Syscall_frame *f,
       return commit_result(-L4_err::ENosys);
     }
 }
+
+// ----------------------------------------------------------------------------
+IMPLEMENTATION [mbwp]:
+
+IMPLEMENT_OVERRIDE inline
+void
+Scheduler::sys_run_call_in(Thread *)
+{
+  //Sched_constraint *mbwp_sc = Mbwp::sc.cpu(info.cpu);
+  //if (!t->sched()->contains(mbwp_sc))
+  //  t->sched()->attach(mbwp_sc);
+}
+

@@ -786,9 +786,11 @@ Context::schedule()
   // Select a thread for scheduling.
   Context *next_to_run;
 
+  //printf("C[%p] schedule\n", this);
   for (;;)
     {
       next_to_run = rq->next_to_run()->context();
+      //printf("trying C[%p]\n", next_to_run);
 
       // Ensure ready-list sanity
       assert (next_to_run);

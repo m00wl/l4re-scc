@@ -226,7 +226,7 @@ Perf_cnt::init_cpu()
 
   cntens((1ul << 31) | ((1ul << _nr_counters) - 1));
 
-  pmccfilt((1 << 31));
+  //pmccfilt((1 << 31));
 
   // allow user to access events
   useren(1);
