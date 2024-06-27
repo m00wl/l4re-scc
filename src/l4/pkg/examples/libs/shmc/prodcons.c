@@ -25,7 +25,8 @@
 #include <l4/sys/kip.h>
 #include <l4/re/env.h>
 
-#define LOG(args...)            printf(NAME ": " args)
+#define LOG(args...)
+//#define LOG(args...)            printf(NAME ": " args)
 #define CHK(func)                                               \
   do                                                            \
     {                                                           \
@@ -38,7 +39,8 @@
         }                                                       \
     } while (0)
 
-static const char some_data[] = "Hi consumer!";
+//static const char some_data[] = "Hi consumer!";
+static const char some_data[] = "x8oN3lWnOZv0QF4aRp9Yy6JwE7fKtHbPiLqGgXjFdTcVbYu1hZm5DnAs8f5RtTz";
 
 static inline l4_cap_idx_t self(void) { return pthread_l4_cap(pthread_self()); }
 
@@ -86,7 +88,8 @@ static void *thread_producer(void *d)
 
   LOG("Ready.\n");
 
-  while (1)
+  //while (1)
+  for (int i = 0; i < 1000000; i++)
     {
       while (l4shmc_chunk_try_to_take(&p_one))
         printf("Uh, should not happen!\n"); //l4_thread_yield();
@@ -100,7 +103,7 @@ static void *thread_producer(void *d)
       CHK(l4shmc_wait_signal(&s_done));
     }
 
-  l4_sleep_forever();
+  //l4_sleep_forever();
   return NULL;
 }
 
@@ -151,7 +154,8 @@ static void *thread_consumer(void *d)
 
   LOG("Ready.\n");
 
-  while (1)
+  //while (1)
+  for (int i = 0; i < 1000000; i++)
     {
       CHK(l4shmc_wait_chunk(&p_one));
 
@@ -172,6 +176,7 @@ int main(void)
 {
   pthread_t one, two;
   long r;
+  l4_kernel_clock_t start, end;
 
   // create shared memory area
   if ((r = l4shmc_create("testshm")) < 0)
@@ -181,9 +186,19 @@ int main(void)
       return 1;
     }
 
+  start = l4_kip_clock(l4re_kip());
+
   // create two threads, one for producer, one for consumer
   pthread_create(&one, 0, thread_producer, 0);
   pthread_create(&two, 0, thread_consumer, 0);
+
+  pthread_join(one, NULL);
+  pthread_join(two, NULL);
+
+  end = l4_kip_clock(l4re_kip());
+
+  double used = ((double) (end - start)) / 1000000;
+  printf("time: %.8f s\n", used);
 
   // now sleep, the two threads are doing the work
   l4_sleep_forever();

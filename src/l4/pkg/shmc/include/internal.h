@@ -59,7 +59,7 @@ L4_CV L4_INLINE long
 l4shmc_get_chunk(l4shmc_area_t *shmarea, char const *chunk_name,
                  l4shmc_chunk_t *chunk)
 {
-  return l4shmc_get_chunk_to(shmarea, chunk_name, 0, chunk);
+  return l4shmc_get_chunk_to(shmarea, chunk_name, 1000, chunk);
 }
 
 
