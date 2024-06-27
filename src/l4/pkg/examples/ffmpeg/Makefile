@@ -60,7 +60,7 @@ update_ffmpeg:
 
 DOMFLAGS = MAKEFLAGS="$(strip $(foreach a,$(MAKEFLAGS),$(filter --job%,$(a)) $(filter -j,$(a))))"
 
-$(FFMPEG_INST)/lib/libavcodec.a: $(SRC_DIR)/Makefile
+$(FFMPEG_INST)/lib/libavcodec.a: $(SRC_DIR)/Makefile build_ffmpeg
 	mkdir -p $(FFMPEG_OBJ)
 	cd $(FFMPEG_OBJ) && \
 	  $(FFMPEG_SRC)/configure --prefix=$(FFMPEG_INST) \

@@ -1,3 +1,3 @@
-requires: stdlibs
+requires: stdlibs libstdc++
 provides: calc-pi
 maintainer: moritz.lumme@kernkonzept.com
