@@ -15,7 +15,7 @@ using L4Re::chkcap;
 using L4Re::chksys;
 using cxx::access_once;
 
-static constexpr auto N_THREADS = 1; 
+static constexpr auto N_THREADS = 3;
 static constexpr auto N_READS = 16777216;
 static constexpr auto MEM_SIZE = 1073741824; // 1 GiB
 static constexpr auto CACHE_LINE_SIZE = 64;
@@ -50,9 +50,9 @@ void *benchmark_core(void *arg)
 
   //auto loc = ds_start;
 
-  for (int i = 0; i < N_READS; i++)
-  //volatile int endless = 1;
-  //while (endless)
+  //for (int i = 0; i < N_READS; i++)
+  volatile int endless = 1;
+  while (endless)
   {
     //l4_sleep_forever();
     auto loc = ds_start + uid(dre);
@@ -69,7 +69,7 @@ void *benchmark_core(void *arg)
 
 int main(void)
 {
-  printf("benchmark prepare\n");
+  printf("Preparing...\n");
   L4Re::Env const *e = L4Re::Env::env();
   L4::Cap<L4::Scheduler> s = e->scheduler();
   L4::Cap<L4Re::Dataspace> ds;
@@ -99,12 +99,12 @@ int main(void)
     pthread_attr_destroy(&attr);
   }
 
-  printf("benchmark start\n");
+  printf("Start Pointer Chasing\n");
 
   for (int i = N_THREADS - 1; i >= 0; i--)
   {
     l4_sched_param_t sp = l4_sched_param(255); 
-    sp.affinity.set(0, i);
+    sp.affinity.set(0, i+1);
     sp.affinity.map = 1;
     L4::Cap<L4::Thread> t(pthread_l4_cap(threads[i]));
     s->set_prio(t, 255);

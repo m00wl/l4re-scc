@@ -54,6 +54,16 @@ modaddr 0x01100000
 default-kernel fiasco -serial_esc
 default-bootstrap bootstrap
 
+entry demo
+kernel fiasco -serial_esc
+roottask moe rom/demo.cfg
+module l4re
+module ned
+module demo.cfg
+module video-pipeline
+module video.yuv
+module pointer-chasing
+
 entry calc-pi
 roottask moe --init=rom/calc-pi
 module l4re

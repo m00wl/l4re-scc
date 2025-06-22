@@ -135,15 +135,29 @@ void mm(AVFrame *frame, uint8_t *in1, uint8_t *in2)
   }
 }
 
+#define PBSTR "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||"
+#define PBWIDTH 60
+
+int count = 0;
+
+void printProgress(double percentage) {
+  int val = (int) (percentage * 100);
+  int lpad = (int) (percentage * PBWIDTH);
+  int rpad = PBWIDTH - lpad;
+  printf("\rvideo-pi| %3d%% [%.*s%*s]", val, lpad, PBSTR, rpad, "");
+  fflush(stdout);
+}
+
 void mem(AVFrame *frame, uint64_t *mem);
 void mem(AVFrame *frame, uint64_t *mem)
 {
-  int const N_READS = 16777216;
+  int const N_READS = (1677721 / 2) * 1.1;
+  //int const N_READS = 16;
 
   uint64_t res = 0;
   int loc = 0;
 
-  for (int i = 0; i < (16 * N_READS); i++)
+  for (int i = 0; i < (1 * N_READS); i++)
   {
     uint64_t *p = mem + loc;
     asm volatile ( "" : "=m"(*p));
@@ -151,6 +165,8 @@ void mem(AVFrame *frame, uint64_t *mem)
     asm volatile ( "" : "=m"(*p));
     loc += 8;
     loc %= N_READS;
+    if (i % 10000 == 0)
+      printProgress((double)++count / (double)(N_READS/1000));
   }
 
   uint64_t *ptr = (uint64_t *)&((frame->data[0])[8]);
@@ -159,9 +175,9 @@ void mem(AVFrame *frame, uint64_t *mem)
 
 int main(int argc, char *argv[])
 {
-  //sleep(30);
+  sleep(15);
 
-  printf("Start FFmpeg Workload\n");
+  printf("Start Video Pipeline\n");
 
   if (argc != 2)
   {
@@ -169,7 +185,7 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  av_log_set_level(AV_LOG_QUIET);
+  //av_log_set_level(AV_LOG_QUIET);
 
   AVFormatContext *pFormatContext = avformat_alloc_context();
   if (!pFormatContext)
@@ -316,8 +332,12 @@ int main(int argc, char *argv[])
   unsigned frame_count = 0;
   unsigned long long clock_start = clk();
 
-  uint64_t cycle1;
-  asm volatile ("mrs %0, PMCCNTR_EL0" : "=r" (cycle1));
+  //uint64_t cycle1;
+  //asm volatile ("mrs %0, PMCCNTR_EL0" : "=r" (cycle1));
+  int const N_READS = 1677721;
+  size_t const MEM_SIZE = N_READS * sizeof(uint64_t);
+  uint64_t *m = malloc(MEM_SIZE);
+  memset(m, 0x0, MEM_SIZE);
 
   while (av_read_frame(pFormatContext, pPacket) >= 0)
   {
@@ -361,25 +381,26 @@ int main(int argc, char *argv[])
       //  }
       //}
 
-      size_t const FRAME_SIZE = pFrame->linesize[0] * pFrame->height
-                                * sizeof(uint8_t);
-      uint8_t *b = malloc(FRAME_SIZE);
-      memset(b, 0x0, FRAME_SIZE);
-      uint8_t *e = malloc(FRAME_SIZE);
-      memset(e, 0x0, FRAME_SIZE);
-      int const N_READS = 16777216;
-      size_t const MEM_SIZE = N_READS * sizeof(uint64_t);
-      uint64_t *m = malloc(MEM_SIZE);
-      memset(m, 0x0, MEM_SIZE);
+      //printf("start frame\n");
 
-      gblur(pFrame, b, 5, 1.0);
-      sobel(pFrame, e);
-      mm(pFrame, b, e);
+      //size_t const FRAME_SIZE = pFrame->linesize[0] * pFrame->height
+      //                          * sizeof(uint8_t);
+      //uint8_t *b = malloc(FRAME_SIZE);
+      //memset(b, 0x0, FRAME_SIZE);
+      //uint8_t *e = malloc(FRAME_SIZE);
+      //memset(e, 0x0, FRAME_SIZE);
+      
+      //gblur(pFrame, b, 5, 1.0);
+      //printf("blur done\n");
+      //sobel(pFrame, e);
+      //printf("sobel done\n");
+      //mm(pFrame, b, e);
+      //printf("mm done\n");
       mem(pFrame, m);
+      //printf("mem done\n");
 
-      free(m);
-      free(e);
-      free(b);
+      //free(e);
+      //free(b);
 
       frame_count++;
       //printf("frame: %u\n", frame_count);
@@ -407,12 +428,14 @@ int main(int argc, char *argv[])
     av_packet_unref(pPacket);
   }
 
-  uint64_t cycle2;
-  asm volatile ("mrs %0, PMCCNTR_EL0" : "=r" (cycle2));
+  free(m);
 
-  printf("cycle delta: 0x%lX\n", cycle2-cycle1);
+  //uint64_t cycle2;
+  //asm volatile ("mrs %0, PMCCNTR_EL0" : "=r" (cycle2));
 
-  printf("Decoded %u frames in %f seconds.\n", frame_count,
+  //printf("cycle delta: 0x%lX\n", cycle2-cycle1);
+
+  printf("\nProcessed %u frames in %f seconds.\n", frame_count,
       (clk() - clock_start) / 1000000.0);
 
   avformat_close_input(&pFormatContext);

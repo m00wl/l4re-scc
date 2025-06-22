@@ -49,6 +49,7 @@ public:
     Quant_sc,
     Budget_sc,
     Timer_window_sc,
+    Mbw_sc,
   };
 
 private:
@@ -384,6 +385,9 @@ sched_constraint_factory(Ram_quota *q, Space *, L4_msg_tag t, Utcb const *u,
     case Sched_constraint::Type::Timer_window_sc:
       res = Timer_window_sc::create(q, t, u);
       break;
+    //case Sched_constraint::Type::Mbw_sc:
+    //  res = Mbw_sc::create(q, t, u);
+    //  break;
     default:
       *err = L4_err::EInval;
       res = nullptr;

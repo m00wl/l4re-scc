@@ -24,7 +24,7 @@ public:
   static void reset_counters();
   static Unsigned64 mbs_to_cache_events(Unsigned64);
 
-  //static Per_cpu<Cond_sc *> sc;
+  static Per_cpu<Cond_sc *> sc;
 
 private:
   // counters.
@@ -88,7 +88,7 @@ IMPLEMENTATION [mbwp]:
 
 DEFINE_PER_CPU Per_cpu<Mbwp::Mbwp_irq> Mbwp::_irq;
 DEFINE_PER_CPU Per_cpu<Mbwp::Mbwp_stats> Mbwp::_stats;
-//DEFINE_PER_CPU Per_cpu<Cond_sc *> Mbwp::sc;
+DEFINE_PER_CPU Per_cpu<Cond_sc *> Mbwp::sc;
 
 IMPLEMENT_OVERRIDE static
 void
@@ -108,9 +108,9 @@ Mbwp::init()
   reset_counter(READ_CNT);
   reset_counter(WRITE_CNT);
 
-  //Cond_sc *_sc = Cond_sc::create(Ram_quota::root);
-  //_sc->set_run(true);
-  //sc.current() = _sc;
+  Cond_sc *_sc = Cond_sc::create(Ram_quota::root);
+  _sc->set_run(true);
+  sc.current() = _sc;
 }
 
 IMPLEMENT static
@@ -133,11 +133,11 @@ IMPLEMENT static
 void
 Mbwp::reset_counter(unsigned counter)
 {
-  //Mword val = 0UL - _stats.current().budget[counter];
-  Mword val = 0;
-  Mbw_sc *sc = Ready_queue::rq.current().mbw_sc();
-  if (sc)
-    val = sc->get_budget(counter);
+  Mword val = 0UL - _stats.current().budget[counter];
+  //Mword val = 0;
+  //Mbw_sc *sc = Ready_queue::rq.current().mbw_sc();
+  //if (sc)
+  //  val = sc->get_budget(counter);
   Perf_cnt::write_counter(counter, val);
 }
 
@@ -154,13 +154,13 @@ IMPLEMENT static
 void
 Mbwp::handle_irq()
 {
-  //sc.current()->set_run(false);
-  Mbw_sc *sc = Ready_queue::rq.current().mbw_sc();
-  if (sc)
-  {
-    sc->set_run(false);
-    sc->set_timeout();
-  }
+  sc.current()->set_run(false);
+  //Mbw_sc *sc = Ready_queue::rq.current().mbw_sc();
+  //if (sc)
+  //{
+  //  sc->set_run(false);
+  //  sc->set_timeout();
+  //}
 
   // TODO: maybe ack in one write?
   Perf_cnt::ack_oflow_irq(READ_CNT);
@@ -178,7 +178,7 @@ Mbwp::handle_period()
   reset_counter(READ_CNT);
   reset_counter(WRITE_CNT);
 
-  //sc.current()->release();
+  sc.current()->release();
 }
 
 IMPLEMENT static

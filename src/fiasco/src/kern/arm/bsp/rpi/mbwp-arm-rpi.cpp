@@ -16,9 +16,9 @@ Mbwp::init_platform()
 static constexpr unsigned config[4][2] = {
 // { read, write } MB/s
    { 4000, 4000 },
-   { 500, 500 },
-   { 4000, 4000 },
-   { 4000, 4000 },
+   { 50, 50 },
+   { 50, 50 },
+   { 50, 50 },
 };
 
 PRIVATE static

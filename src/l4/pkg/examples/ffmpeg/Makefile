@@ -1,7 +1,8 @@
 PKGDIR	?= ..
 L4DIR		?= $(PKGDIR)/../..
 
-TARGET	= $(if $(wildcard $(SRC_DIR)/do-build),ffmpeg-bench-mem)
+#TARGET	= $(if $(wildcard $(SRC_DIR)/do-build),ffmpeg-bench-mem)
+TARGET	= $(if $(wildcard $(SRC_DIR)/do-build),video-pipeline)
 
 $(if $(SYSTEM),$(if $(TARGET),,$(info ffmpeg-bench-mem not built because 'do-build' not there in $(SRC_DIR).)))
 
@@ -24,7 +25,8 @@ DEPENDS_PKGS    = $(REQUIRES_LIBS)
 CFLAGS         += $(DEFINES_$(BUILD_MODE))
 PRIVATE_INCDIR  = $(FFMPEG_INST)/include
 PRIVATE_LIBDIR  = $(FFMPEG_INST)/lib
-SRC_C		= bench-mem.c
+#SRC_C		= bench-mem.c
+SRC_C		= video-pipeline.c
 
 include $(L4DIR)/mk/prog.mk
 
@@ -32,7 +34,8 @@ FFMPEG_OPTS_x86 =
 
 LDFLAGS += --no-warn-mismatch
 
-$(TARGET) $(SRC_DIR)/bench-mem.c: $(FFMPEG_INST)/lib/libavcodec.a
+#$(TARGET) $(SRC_DIR)/bench-mem.c: $(FFMPEG_INST)/lib/libavcodec.a
+$(TARGET) $(SRC_DIR)/video-pipeline: $(FFMPEG_INST)/lib/libavcodec.a
 
 ARCH_MAP_$(ARCH)   = $(ARCH)
 ARCH_MAP_x86       = x86

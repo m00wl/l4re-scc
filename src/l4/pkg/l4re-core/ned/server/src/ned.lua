@@ -82,6 +82,7 @@ SC_types = {
   Quant_sc        = 1,
   Budget_sc       = 2,
   Timer_window_sc = 3,
+  Mbw_sc          = 4,
 }
 
 -- Loader class, encapsulates a loader instance.

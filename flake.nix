@@ -1,9 +1,7 @@
 {
-  description = "l4re-scc flake";
+  description = "l4re-scc dev";
 
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-  };
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
   outputs = inputs @ {flake-parts, ...}:
     flake-parts.lib.mkFlake {inherit inputs;} {
@@ -27,7 +25,6 @@
           packages = [
             # build
             pkgs.gcc
-            #pkgsArm64.buildPackages.gcc9
             pkgs.dialog
             pkgs.gawk
             pkgs.binutils
@@ -39,6 +36,7 @@
             pkgs.nasm
             # run
             pkgs.qemu
+            pkgs.minicom
           ];
           shellHook = ''
             export L4RE_SCC_ROOT=$(git rev-parse --show-toplevel)

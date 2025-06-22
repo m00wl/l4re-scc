@@ -131,7 +131,10 @@ Scheduler::sys_run(L4_fpage::Rights, Syscall_frame *f, Utcb const *utcb)
   sys_run_call_in(thread);
   //Sched_constraint *mbwp_sc = Mbwp::sc.cpu(info.cpu);
   //if (!thread->sched()->contains(mbwp_sc))
+  //{
   //  thread->sched()->attach(mbwp_sc);
+  //  printf("attached mbwp_sc to T[%p] on CPU %d\n", thread, cxx::int_value<Cpu_number>(info.cpu));
+  //}
 
   // TOMO: what happens if attach_sc fails?
   if (_global_sc)
