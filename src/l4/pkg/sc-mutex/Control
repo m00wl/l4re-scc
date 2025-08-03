@@ -1,0 +1,3 @@
+requires: stdlibs libc libstdc++
+provides: sc-mutex
+maintainer: moritz.lumme@kernkonzept.com

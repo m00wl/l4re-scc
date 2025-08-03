@@ -69,6 +69,11 @@ roottask moe --init=rom/calc-pi
 module l4re
 module calc-pi
 
+entry sc-mutex
+roottask moe --init=rom/sc-mutex
+module l4re
+module sc-mutex
+
 entry ex_shmc
 kernel fiasco -serial_esc
 roottask moe rom/ex_shmc.cfg

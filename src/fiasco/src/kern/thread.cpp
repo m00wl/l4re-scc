@@ -1263,7 +1263,7 @@ void
 Thread::handle_remote_requests_irq()
 {
   assert (cpu_lock.test());
-  // printf("CPU[%2u]: > RQ IPI (current=%p)\n", current_cpu(), current());
+  printf("CPU[%2u]: > RQ IPI (current=%p)\n", cxx::int_value<Cpu_number>(current_cpu()), current());
   Context *const c = current();
   Ipi::eoi(Ipi::Request, current_cpu());
   //LOG_MSG_3VAL(c, "ipi", c->cpu(), (Mword)c, c->drq_pending());
@@ -1294,6 +1294,7 @@ Thread::handle_remote_requests_irq()
     }
   else if (resched)
     c->schedule();
+  printf("CPU[%2u]: > RQ IPI (current=%p) handling done\n", cxx::int_value<Cpu_number>(current_cpu()), current());
 }
 
 IMPLEMENT

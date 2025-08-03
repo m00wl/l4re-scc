@@ -58,10 +58,17 @@ private:
   typedef cxx::Sd_list<Sched_context> Blocked_list;
   Blocked_list _list;
   bool _dying;
+  bool _wake_up_is_blocking;
 };
 
 class Cond_sc : public Sched_constraint
-{};
+{
+private:
+  enum Operation
+  {
+    Op_Flip,
+  };
+};
 
 class Quant_sc : public Sched_constraint
 {
@@ -237,7 +244,8 @@ PUBLIC
 Sched_constraint::Sched_constraint(Ram_quota *q)
 : _quota(q),
   _run(false),
-  _dying(false)
+  _dying(false),
+  _wake_up_is_blocking(false)
 {
   //printf("SC[%p]: created\n", this);
 }
@@ -317,24 +325,45 @@ Sched_constraint::wake_up_all_blocked()
   assert(test());
 
   // TOMO: we want to requeue all blocked threads on THEIR home cpus
-  // maybe with drq to them?
-  //panic("wake_up_all_blocked() is tricky");
-
   Sched_context *scx;
+
+  for (auto scx = _list.begin(); scx != _list.end(); ++scx)
+  {
+    (*scx)->context()->xcpu_state_change(~0UL, Thread_ready);
+  }
 
   while (!_list.empty())
   {
-    scx = _list.front();
-    _list.remove(scx);
+    for (auto scx = _list.begin(); scx != _list.end();)
+    {
+      if (!_wake_up_is_blocking) {
+        scx = _list.erase(scx);
+        continue;
+      }
 
-    // TOMO:
-    // enqueue here somehow
-    // what about migration happening here in parallel?
+      if (0 /* TODO: check for IPI received and wake up done; maybe Thread_ready state or maybe to ambiguous?*/) {
+        scx = _list.erase(scx);
+      }
+      else
+      {
+        ++scx;
+      }
 
-    //scx->reset_blocked();
-    scx->context()->xcpu_state_change(~0UL, Thread_ready);
-    //Ready_queue::rq.current().ready_enqueue(scx);
+    }
   }
+
+  //while (!_list.empty())
+  //{
+  //  scx = _list.front();
+  //  _list.remove(scx);
+
+  //  // TOMO: what about migration happening here in parallel?
+
+  //  //scx->reset_blocked();
+  //  scx->context()->xcpu_state_change(~0UL, Thread_ready);
+  //  //Ready_queue::rq.current().ready_enqueue(scx);
+  //}
+  printf("continuing...\n");
 }
 
 PUBLIC
@@ -453,6 +482,39 @@ PUBLIC
 void
 Cond_sc::migrate_to(Cpu_number) override
 {}
+
+PUBLIC
+void
+Cond_sc::invoke(L4_obj_ref self, L4_fpage::Rights rights, Syscall_frame *f,
+                  Utcb *utcb) override
+{
+  (void)rights;
+
+  L4_msg_tag res(L4_msg_tag::Schedule);
+
+  if (EXPECT_TRUE(self.op() & L4_obj_ref::Ipc_send))
+  {
+    switch (utcb->values[0])
+    {
+      case Op_Flip: res = flip(); break;
+      default:   res = commit_result(-L4_err::ENosys); break;
+    }
+  }
+
+  f->tag(res);
+}
+
+PRIVATE
+L4_msg_tag
+Cond_sc::flip()
+{
+  set_run(!can_run());
+  // TODO: initiate resched on other CPUs?
+  // TODO: a la: stop_all_running()?
+  if (can_run())
+    wake_up_all_blocked();
+  return commit_result(0);
+}
 
 static Kmem_slab_t<Quant_sc> _quant_sc_allocator("Quant_sc");
 

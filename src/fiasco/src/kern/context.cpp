@@ -1253,7 +1253,7 @@ Context::Drq_q::execute_request(Drq *r, Drop_mode drop, bool local)
 {
   bool need_resched = false;
   Context *const self = context();
-  if (0)
+  if (1)
     printf("CPU[%2u:%p]: context=%p: handle request for %p (func=%p, arg=%p)\n", cxx::int_value<Cpu_number>(current_cpu()), current(), context(), r->context(), r->func, r->arg);
   if (r->context() == self)
     {
@@ -1491,6 +1491,7 @@ Context::xcpu_state_change(Mword mask, Mword add, bool lazy_q = false)
       auto guard = lock_guard(_remote_state_change.lock);
       if (EXPECT_TRUE(access_once(&_home_cpu) != current_cpu))
         {
+          printf("xcpu_state_change remote thread\n");
           _remote_state_change.add = (_remote_state_change.add & mask) | add;
           _remote_state_change.del = (_remote_state_change.del & ~add)  | ~mask;
           guard.reset();
@@ -1499,6 +1500,7 @@ Context::xcpu_state_change(Mword mask, Mword add, bool lazy_q = false)
         }
     }
 
+  printf("xcpu_state_change local thread\n");
   state_change_dirty(mask, add);
   if (add & Thread_ready_mask)
     //return Sched_context::rq.current().deblock(sched(), current()->sched(), lazy_q);
@@ -1967,10 +1969,14 @@ IMPLEMENT
 bool
 Context::Pending_rqq::handle_requests(Context **mq)
 {
+  // TODO: continue here.
+  // TODO: this is where wake_up_all_blocked ends up, calling handle_remote_state_change to wake up the remote thread.
+  // TODO: find out if and how we can wait for that.
+  // TODO: study DRQ apparatus
   //(void)mq;
   //panic("c: Pending_rqq::handle_requests not available\n");
   //LOG_MSG_3VAL(current(), "phq", current_cpu(), 0, 0);
-  if (0)
+  if (1)
     printf("CPU[%2u:%p]: Context::Pending_rqq::handle_requests() this=%p\n", cxx::int_value<Cpu_number>(current_cpu()), current(), this);
   bool resched = false;
   Context *curr = current();
@@ -1989,6 +1995,8 @@ Context::Pending_rqq::handle_requests(Context **mq)
 
       assert (c->check_for_current_cpu());
 
+      // TODO: make this set resched to true?
+      // TODO: how to differentiate the case where remote state change is triggered by SC?
       c->handle_remote_state_change();
       if (EXPECT_FALSE(c->_migration != 0))
         {

@@ -10,6 +10,7 @@
 
 #include <cstdio>
 #include <chrono>
+#include <unistd.h>
 
 using L4Re::chkcap;
 using L4Re::chksys;
@@ -17,6 +18,7 @@ using L4Re::chksys;
 unsigned long get_current_time_in_ms(void);
 void *cpu_hog(void *);
 void *calc_pi(void *);
+void *workload(void *);
 
 unsigned long get_current_time_in_ms(void)
 {
@@ -88,6 +90,16 @@ void *cpu_hog(void *)
   return nullptr;
 }
 
+void *workload(void *)
+{
+  while (true)
+  {
+    printf("work;\n");
+    sleep(1);
+  }
+  return nullptr;
+}
+
 int main(void)
 {
   calc_pi(nullptr);
@@ -96,49 +108,49 @@ int main(void)
   //L4::Cap<L4::Factory> f = e->factory();
   //L4::Cap<L4::Scheduler> s = e->scheduler();
 
-  //pthread_t thread_prio;
-  //pthread_attr_t attr_prio;
-  //pthread_attr_init(&attr_prio);
-  //attr_prio.create_flags |= PTHREAD_L4_ATTR_NO_START;
-  //if (pthread_create(&thread_prio, &attr_prio, cpu_hog, nullptr))
-  //  L4Re::chksys(-L4_ENOSYS, "pthread create failure");
-  //pthread_attr_destroy(&attr_prio);
-  //L4::Cap<L4::Thread> t_prio(pthread_l4_cap(thread_prio));
-  //s->detach_sc(t_prio, L4::Cap<L4::Budget_sc>());
-  //L4::Cap<L4::Budget_sc> sc;
-  //sc = L4Re::Util::cap_alloc.alloc<L4::Budget_sc>();
-  //chkcap(sc, "sched_constraint cap alloc");
-  //l4_msgtag_t r = f->create(sc) << l4_umword_t(L4_SCHED_CONSTRAINT_TYPE_BUDGET);
-  //chksys(r, "sched_constraint factory create");
-  //s->attach_sc(t_prio, sc);
+  //pthread_t pt;
+  //pthread_attr_t a;
+  //pthread_attr_init(&a);
+  //a.create_flags |= PTHREAD_L4_ATTR_NO_START;
+  //if (pthread_create(&pt, &a, workload, nullptr))
+  //  chksys(-L4_ENOSYS, "pthread_create");
+  //pthread_attr_destroy(&a);
+  //L4::Cap<L4::Thread> t(pthread_l4_cap(pt));
 
-  //pthread_t thread_be;
-  //pthread_attr_t attr_be;
-  //pthread_attr_init(&attr_be);
-  //attr_be.create_flags |= PTHREAD_L4_ATTR_NO_START;
-  //if (pthread_create(&thread_be, &attr_be, calc_pi, nullptr))
-  //  L4Re::chksys(-L4_ENOSYS, "pthread create failure");
-  //pthread_attr_destroy(&attr_be);
-  //L4::Cap<L4::Thread> t_be(pthread_l4_cap(thread_be));
+  //L4::Cap<L4::Cond_sc> sc;
+  //sc = L4Re::Util::cap_alloc.alloc<L4::Cond_sc>();
+  //chkcap(sc, "sched_constraint cap alloc");
+  //l4_msgtag_t r = f->create(sc) << l4_umword_t(L4_SCHED_CONSTRAINT_TYPE_COND);
+  //chksys(r, "sched_constraint factory create");
+  //s->attach_sc(t, sc);
+
+  //L4::Cap<L4::Thread> tself(pthread_l4_cap(pthread_self()));
+  //s->set_prio(tself, 254);
 
   //printf("benchmark start\n");
 
-  //l4_sched_param_t sp_prio = l4_sched_param(255); 
-  //sp_prio.affinity.set(0, 1);
-  //sp_prio.affinity.map = 1;
-  //s->set_prio(t_prio, 255);
-  //s->run_thread(t_prio, sp_prio);
+  //l4_sched_param_t sp = l4_sched_param(255);
+  //sp.affinity.set(0, 1);
+  //sp.affinity.map = 1;
+  //s->set_prio(t, 255);
+  //s->run_thread(t, sp);
 
-  //l4_sched_param_t sp_be = l4_sched_param(254); 
-  //sp_be.affinity.set(0, 1);
-  //sp_be.affinity.map = 1;
-  //s->set_prio(t_be, 254);
-  //s->run_thread(t_be, sp_be);
+  //// TODO: play with Cond_sc here.
+  //// TODO: ausprobieren
+  //// TODO: auslagern in eigenes Paket
+  //// TODO: zusätzliche threads auf anderen cores starten
+  //sleep(10);
+  //printf("flipping cond sc\n");
+  //sc->flip();
+  //sleep(10);
+  //printf("flipping cond sc\n");
+  //sc->flip();
+  //sleep(10);
+  //printf("flipping cond sc\n");
+  //sc->flip();
+  //sleep(10);
 
-  //l4_sleep_forever();
-
-  //pthread_join(thread_prio, nullptr);
-  //pthread_join(thread_be, nullptr);
+  //pthread_join(t, nullptr);
 
   //printf("benchmark done\n");
 

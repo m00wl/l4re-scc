@@ -635,6 +635,9 @@ class Arm_ipis
 public:
   Arm_ipis()
   {
+    // TODO: add SC resched IRQ here?
+    // TODO: check if this works for RPI
+    // TODO: schedule in irq handler func is ok! (e.g. see timer tick handler)
     check(Irq_mgr::mgr->alloc(&remote_rq_ipi, Ipi::Request, false));
     check(Irq_mgr::mgr->alloc(&glbl_remote_rq_ipi, Ipi::Global_request, false));
     check(Irq_mgr::mgr->alloc(&debug_ipi, Ipi::Debug, false));

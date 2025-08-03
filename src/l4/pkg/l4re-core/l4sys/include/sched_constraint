@@ -11,6 +11,21 @@ namespace L4 {
 
 class Sched_constraint {};
 
+class L4_EXPORT Cond_sc :
+  public Sched_constraint,
+  public Kobject_t<Cond_sc, L4::Kobject, L4_PROTO_SCHED_CONSTRAINT>
+{
+public:
+  enum L4_budget_sc_ops
+  {
+    L4_COND_SC_FLIP_OP = 0UL,
+  };
+
+  L4_INLINE_RPC_OP(L4_COND_SC_FLIP_OP, l4_msgtag_t, flip, ());
+
+  typedef L4::Typeid::Rpcs_sys<flip_t> Rpcs;
+};
+
 class L4_EXPORT Budget_sc :
   public Sched_constraint,
   public Kobject_t<Budget_sc, L4::Kobject, L4_PROTO_SCHED_CONSTRAINT>

@@ -8,7 +8,7 @@ INTERFACE:
 
 #define M_IPC_DEBUG       0
 #define M_TIMER_DEBUG     0
-#define M_DRQ_DEBUG       0
+#define M_DRQ_DEBUG       1
 #define M_MIGRATION_DEBUG 0
 #define M_SCHEDULER_DEBUG 0
 
