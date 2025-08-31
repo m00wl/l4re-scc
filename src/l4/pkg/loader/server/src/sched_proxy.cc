@@ -208,6 +208,14 @@ Sched_proxy::set_global_sc(L4::Cap<L4::Sched_constraint> sc)
   return L4_EOK;
 }
 
+int
+Sched_proxy::set_cpus_sc(L4::Cap<L4::Sched_constraint> sc,
+                         l4_sched_cpu_set_t const &cpus)
+{
+  return l4_error(L4Re::Env::env()->scheduler()->set_cpus_sc(sc, cpus & _cpus));
+}
+
+
 L4::Cap<L4::Thread>
 Sched_proxy::received_thread(L4::Ipc::Snd_fpage const &fp)
 {

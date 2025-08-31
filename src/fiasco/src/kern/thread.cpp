@@ -1263,7 +1263,7 @@ void
 Thread::handle_remote_requests_irq()
 {
   assert (cpu_lock.test());
-  printf("CPU[%2u]: > RQ IPI (current=%p)\n", cxx::int_value<Cpu_number>(current_cpu()), current());
+  if (M_DRQ_DEBUG) printf("CPU[%2u]: > RQ IPI (current=%p)\n", cxx::int_value<Cpu_number>(current_cpu()), current());
   Context *const c = current();
   Ipi::eoi(Ipi::Request, current_cpu());
   //LOG_MSG_3VAL(c, "ipi", c->cpu(), (Mword)c, c->drq_pending());
@@ -1294,7 +1294,7 @@ Thread::handle_remote_requests_irq()
     }
   else if (resched)
     c->schedule();
-  printf("CPU[%2u]: > RQ IPI (current=%p) handling done\n", cxx::int_value<Cpu_number>(current_cpu()), current());
+  if (M_DRQ_DEBUG) printf("CPU[%2u]: > RQ IPI (current=%p) handling done\n", cxx::int_value<Cpu_number>(current_cpu()), current());
 }
 
 IMPLEMENT
@@ -1304,7 +1304,10 @@ Thread::handle_global_remote_requests_irq()
   assert (cpu_lock.test());
   // printf("CPU[%2u]: > RQ IPI (current=%p)\n", current_cpu(), current());
   Ipi::eoi(Ipi::Global_request, current_cpu());
-  Cpu_call::handle_global_requests();
+  if (Cpu_call::handle_global_requests()) {
+      if (M_DRQ_DEBUG) printf("\033[31mhandle_global_request_irq returned true; reschedule now!\033[0m\n");
+      current()->schedule();
+  }
 }
 
 PRIVATE inline

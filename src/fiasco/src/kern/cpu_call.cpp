@@ -243,7 +243,7 @@ Cpu_call::cpu_call_many(Cpu_mask const &cpus,
                         cxx::functor<bool (Cpu_number)> &&func,
                         bool async = false)
 {
-  assert (async || !cpu_lock.test());
+  //assert (async || !cpu_lock.test());
   Cpu_calls<8> cs;
   Cpu_number n;
   Cpu_call *c = cs.next();

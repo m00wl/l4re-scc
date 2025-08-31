@@ -51,6 +51,9 @@ public:
 
   virtual int set_global_sc(L4::Cap<L4::Sched_constraint> sc) = 0;
 
+  virtual int set_cpus_sc(L4::Cap<L4::Sched_constraint> sc,
+                          l4_sched_cpu_set_t const &cpus) = 0;
+
   virtual ~Scheduler_interface() {}
 };
 
@@ -138,6 +141,17 @@ public:
     return this_svr()->set_global_sc(s);
   }
 
+  long op_set_cpus_sc(L4::Scheduler::Rights, L4::Ipc::Snd_fpage sc,
+                      l4_sched_cpu_set_t const &cpus)
+  {
+    L4::Cap<L4::Sched_constraint> s = this_svr()->received_sc(sc, 0);
+    if (!s.is_valid())
+      return -L4_EINVAL;
+
+    return this_svr()->set_cpus_sc(s, cpus);
+  }
+
+
 protected:
   SVR const *this_svr() const { return static_cast<SVR const *>(this); }
   SVR *this_svr() { return static_cast<SVR *>(this); }
@@ -187,6 +201,10 @@ public:
 
   int set_global_sc(L4::Cap<L4::Sched_constraint> sc)
   { return _sched->set_global_sc(sc); }
+
+  int set_cpus_sc(L4::Cap<L4::Sched_constraint> sc,
+                  l4_sched_cpu_set_t const &cpus)
+  { return _sched->set_cpus_sc(sc, cpus); }
 
   Icu::Irq *scheduler_irq() { return &_scheduler_irq; }
   Icu::Irq const *scheduler_irq() const { return &_scheduler_irq; }

@@ -283,6 +283,7 @@ enum L4_scheduler_ops
   L4_SCHEDULER_ATTACH_SC_OP      = 4UL,
   L4_SCHEDULER_DETACH_SC_OP      = 5UL,
   L4_SCHEDULER_SET_GLOBAL_SC_OP  = 6UL,
+  L4_SCHEDULER_SET_CPUS_SC_OP    = 7UL,
 };
 
 /*************** Implementations *******************/

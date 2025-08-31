@@ -740,6 +740,7 @@ Context::schedule()
 
   //panic("c: schedule not available\n");
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> we schedule now [RQ has %d entries]\n", Ready_queue::rq.current()._c);
+  //printf("we schedule now on cpu %d called by %p\n", cxx::int_value<Cpu_number>(::current_cpu()), __builtin_return_address(0));
   auto guard = lock_guard(cpu_lock);
   //assert (!Sched_context::rq.current().schedule_in_progress);
   assert (!Ready_queue::rq.current().schedule_in_progress);
@@ -1253,7 +1254,7 @@ Context::Drq_q::execute_request(Drq *r, Drop_mode drop, bool local)
 {
   bool need_resched = false;
   Context *const self = context();
-  if (1)
+  if (M_DRQ_DEBUG)
     printf("CPU[%2u:%p]: context=%p: handle request for %p (func=%p, arg=%p)\n", cxx::int_value<Cpu_number>(current_cpu()), current(), context(), r->context(), r->func, r->arg);
   if (r->context() == self)
     {
@@ -1483,7 +1484,7 @@ PUBLIC inline NEEDS[Context::pending_rqq_enqueue, "thread_state.h"]
 bool
 Context::xcpu_state_change(Mword mask, Mword add, bool lazy_q = false)
 {
-  (void)lazy_q;
+  //(void)lazy_q;
   //panic("c: xcpu_state_change not available\n");
   Cpu_number current_cpu = ::current_cpu();
   if (EXPECT_FALSE(access_once(&_home_cpu) != current_cpu))
@@ -1491,7 +1492,7 @@ Context::xcpu_state_change(Mword mask, Mword add, bool lazy_q = false)
       auto guard = lock_guard(_remote_state_change.lock);
       if (EXPECT_TRUE(access_once(&_home_cpu) != current_cpu))
         {
-          printf("xcpu_state_change remote thread\n");
+          if (M_DRQ_DEBUG) printf("C[%p]: xcpu_state_change by remote thread\n", this);
           _remote_state_change.add = (_remote_state_change.add & mask) | add;
           _remote_state_change.del = (_remote_state_change.del & ~add)  | ~mask;
           guard.reset();
@@ -1500,11 +1501,19 @@ Context::xcpu_state_change(Mword mask, Mword add, bool lazy_q = false)
         }
     }
 
-  printf("xcpu_state_change local thread\n");
+  if (M_DRQ_DEBUG) printf("xcpu_state_change local thread\n");
   state_change_dirty(mask, add);
   if (add & Thread_ready_mask)
+  {
+    if (sched()->_pending_sc_rq)
+    {
+      Mem::mp_mb();
+      write_now(&(sched()->_pending_sc_rq), (Mword)false);
+    }
+
     //return Sched_context::rq.current().deblock(sched(), current()->sched(), lazy_q);
     return Ready_queue::rq.current().deblock(sched(), current()->sched(), lazy_q);
+  }
   return false;
 }
 
@@ -1876,6 +1885,7 @@ protected:
   class Pending_rq : public Queue_item, public Context_member
   {} _pending_rq;
 
+
 protected:
   static Per_cpu<Pending_rqq> _pending_rqq;
 };
@@ -1969,14 +1979,10 @@ IMPLEMENT
 bool
 Context::Pending_rqq::handle_requests(Context **mq)
 {
-  // TODO: continue here.
-  // TODO: this is where wake_up_all_blocked ends up, calling handle_remote_state_change to wake up the remote thread.
-  // TODO: find out if and how we can wait for that.
-  // TODO: study DRQ apparatus
   //(void)mq;
   //panic("c: Pending_rqq::handle_requests not available\n");
   //LOG_MSG_3VAL(current(), "phq", current_cpu(), 0, 0);
-  if (1)
+  if (M_DRQ_DEBUG)
     printf("CPU[%2u:%p]: Context::Pending_rqq::handle_requests() this=%p\n", cxx::int_value<Cpu_number>(current_cpu()), current(), this);
   bool resched = false;
   Context *curr = current();
@@ -1995,9 +2001,13 @@ Context::Pending_rqq::handle_requests(Context **mq)
 
       assert (c->check_for_current_cpu());
 
-      // TODO: make this set resched to true?
-      // TODO: how to differentiate the case where remote state change is triggered by SC?
+
       c->handle_remote_state_change();
+      if (c->sched()->_pending_sc_rq)
+      {
+        Mem::mp_mb();
+        write_now(&c->sched()->_pending_sc_rq, (Mword)false);
+      }
       if (EXPECT_FALSE(c->_migration != 0))
         {
           // if the currently executing thread shall be migrated we must defer
@@ -2034,6 +2044,7 @@ Context::Pending_rqq::handle_requests(Context **mq)
 
           //resched |= Sched_context::rq.current().deblock(c->sched(), cs);
           resched |= Ready_queue::rq.current().deblock(c->sched(), cs);
+          if (M_DRQ_DEBUG) printf("C[%p]: resched after handle_remote_state_change: %s\n", c, resched ? "true" : "false");
         }
     }
 }

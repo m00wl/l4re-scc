@@ -20,6 +20,7 @@ public:
     Attach_sc     = 4,
     Detach_sc     = 5,
     Set_global_sc = 6,
+    Set_cpus_sc   = 7,
   };
 
   static Scheduler scheduler;
@@ -192,6 +193,7 @@ Scheduler::sys_attach_sc(Syscall_frame *f, Utcb const *utcb)
 
   if (!thread->sched()->attach(sc))
     return commit_result(-L4_err::ENomem);
+  // TODO: what if the thread is not running on home_cpu?
   thread->sched()->print();
 
   return commit_result(0);
@@ -246,6 +248,38 @@ Scheduler::sys_set_global_sc(Syscall_frame *f, Utcb const *utcb)
 
   return commit_result(0);
 }
+
+PRIVATE
+L4_msg_tag
+Scheduler::sys_set_cpus_sc(Syscall_frame *f, Utcb const *utcb)
+{
+  L4_msg_tag tag { f->tag() };
+  Ko::Rights rights;
+
+  Sched_constraint *sc { Ko::deref<Sched_constraint>(&tag, utcb, &rights) };
+
+  if (!sc)
+    return tag;
+
+  unsigned long sz = tag.words() * sizeof(Mword);
+
+  if (EXPECT_FALSE(sz < sizeof(L4_cpu_set) + sizeof(Mword)))
+    return commit_result(-L4_err::EInval);
+
+  sz -= sizeof(Mword);
+
+  Mword _store[sizeof(L4_cpu_set) / sizeof(Mword)];
+  memcpy(_store, &utcb->values[1], sizeof(L4_cpu_set));
+
+  L4_cpu_set const *cpus = reinterpret_cast<L4_cpu_set const *>(_store);
+
+  //printf("got cpu_set with gran: %d, offs: %d\n", cxx::int_value<Order>(cpus->granularity()), cxx::int_value<Cpu_number>(cpus->offset()));
+
+  sc->set_cpus(cpus);
+
+  return commit_result(0);
+}
+
 
 PRIVATE
 L4_msg_tag
@@ -373,6 +407,8 @@ Scheduler::kinvoke(L4_obj_ref ref, L4_fpage::Rights rights, Syscall_frame *f,
       return sys_detach_sc(f, iutcb);
     case Set_global_sc:
       return sys_set_global_sc(f, iutcb);
+    case Set_cpus_sc:
+      return sys_set_cpus_sc(f, iutcb);
     default:
       return commit_result(-L4_err::ENosys);
     }

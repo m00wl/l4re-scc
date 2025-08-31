@@ -8,6 +8,7 @@
 
 #include <pthread-l4.h>
 #include <cassert>
+#include <chrono>
 
 #include <unistd.h>
 
@@ -19,9 +20,16 @@ void *workload(void *arg);
 void *workload(void *arg)
 {
   unsigned long cpu = (unsigned long)arg;
+  //using clock = std::chrono::high_resolution_clock;
+
   while (true)
   {
-    printf("work%lu;\n", cpu);
+    //printf("work%lu.1;\n", cpu);
+    //auto start = clock::now();
+    //auto end = start + std::chrono::duration<double>(1.0);
+    //while (clock::now() < end) {};
+    //printf("work%lu.2;\n", cpu);
+    printf("work%lu\n", cpu);
     sleep(1);
   }
   return nullptr;
@@ -51,32 +59,36 @@ int main(void)
   chkcap(sc, "sched_constraint cap alloc");
   l4_msgtag_t r = f->create(sc) << l4_umword_t(L4_SCHED_CONSTRAINT_TYPE_COND);
   chksys(r, "sched_constraint factory create");
+  s->set_cpus_sc(sc, l4_sched_cpu_set(0, 0, 3));
   s->attach_sc(t_local, sc);
   s->attach_sc(t_remote, sc);
 
   L4::Cap<L4::Thread> t_self(pthread_l4_cap(pthread_self()));
-  s->set_prio(t_self, 254);
+  s->set_prio(t_self, 255);
 
   printf("benchmark start\n");
 
-  l4_sched_param_t sp = l4_sched_param(255);
+  l4_sched_param_t sp = l4_sched_param(254);
   sp.affinity.set(0, 0);
-  sp.affinity.map = 1;
-  s->set_prio(t_local, 255);
-  s->run_thread(t_local, sp);
   sp.affinity.map = 2;
   s->set_prio(t_remote, 255);
   s->run_thread(t_remote, sp);
+  sp.affinity.map = 1;
+  s->set_prio(t_local, 255);
+  s->run_thread(t_local, sp);
 
   sleep(10);
   printf("flipping cond sc\n");
   sc->flip();
+  //printf("done\n");
   sleep(10);
   printf("flipping cond sc\n");
   sc->flip();
+  //printf("done\n");
   sleep(10);
   printf("flipping cond sc\n");
   sc->flip();
+  //printf("done\n");
 
   pthread_join(pt_local, nullptr);
   pthread_join(pt_remote, nullptr);

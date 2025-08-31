@@ -7,6 +7,7 @@ INTERFACE:
 #include "kobject.h"
 #include "ref_obj.h"
 #include "spin_lock.h"
+#include "config.h"
 
 #include "cxx/dlist"
 
@@ -35,6 +36,17 @@ public:
   bool dying() const
   { return _dying; }
 
+  void set_cpus(L4_cpu_set const *cpu_set) {
+    _affected_cpus = Cpu_mask();
+    for (unsigned i = 0; i < Config::Max_num_cpus; i++)
+    {
+      Cpu_number cpu = Cpu_number(i);
+      if (cpu_set->contains(cpu))
+        _affected_cpus.set(cpu);
+      //printf("_affected_cpus.cpu(%i): %s\n", i, _affected_cpus.get(cpu) ? "true" : "false");
+    }
+  }
+
   void block(Sched_context *scx);
   void deblock(Sched_context *scx);
 
@@ -58,7 +70,8 @@ private:
   typedef cxx::Sd_list<Sched_context> Blocked_list;
   Blocked_list _list;
   bool _dying;
-  bool _wake_up_is_blocking;
+  bool _async;
+  Cpu_mask _affected_cpus;
 };
 
 class Cond_sc : public Sched_constraint
@@ -232,6 +245,7 @@ IMPLEMENTATION:
 #include "ready_queue.h"
 #include "minmax.h"
 #include "thread_object.h"
+#include "cpu_call.h"
 
 #include "timeslice_timeout.h"
 
@@ -241,11 +255,12 @@ Sched_constraint::operator new (size_t, void *b) throw()
 { return b; }
 
 PUBLIC
-Sched_constraint::Sched_constraint(Ram_quota *q)
+Sched_constraint::Sched_constraint(Ram_quota *q, bool async = true)
 : _quota(q),
   _run(false),
   _dying(false),
-  _wake_up_is_blocking(false)
+  _async(async),
+  _affected_cpus()
 {
   //printf("SC[%p]: created\n", this);
 }
@@ -318,52 +333,64 @@ Sched_constraint::deblock(Sched_context *scx)
 
 PROTECTED
 void
-Sched_constraint::wake_up_all_blocked()
+Sched_constraint::wake_up_everyone()
 {
+  //printf("wake_up_everyone\n");
   auto guard { lock_guard(this) };
 
   assert(test());
 
-  // TOMO: we want to requeue all blocked threads on THEIR home cpus
-  Sched_context *scx;
-
-  for (auto scx = _list.begin(); scx != _list.end(); ++scx)
-  {
-    (*scx)->context()->xcpu_state_change(~0UL, Thread_ready);
-  }
-
-  while (!_list.empty())
-  {
-    for (auto scx = _list.begin(); scx != _list.end();)
+  if (_async) {
+    while (!_list.empty())
     {
-      if (!_wake_up_is_blocking) {
-        scx = _list.erase(scx);
-        continue;
-      }
-
-      if (0 /* TODO: check for IPI received and wake up done; maybe Thread_ready state or maybe to ambiguous?*/) {
-        scx = _list.erase(scx);
-      }
-      else
-      {
-        ++scx;
-      }
-
+      Sched_context *scx = _list.front();
+      _list.remove(scx);
+      scx->context()->xcpu_state_change(~0UL, Thread_ready);
     }
   }
+  else {
+    int size = 0;
+    for (auto scx = _list.begin(); scx != _list.end(); ++scx)
+      size++;
 
-  //while (!_list.empty())
-  //{
-  //  scx = _list.front();
-  //  _list.remove(scx);
+    // TODO: VLA on stack maybe not a good idea...
+    Sched_context *tmp[size];
 
-  //  // TOMO: what about migration happening here in parallel?
+    int i = 0;
+    while (!_list.empty())
+    {
+      Sched_context *scx = _list.front();
+      _list.remove(scx);
+      tmp[i++] = scx;
+      scx->_pending_sc_rq = true;
+      scx->context()->xcpu_state_change(~0UL, Thread_ready);
+    }
 
-  //  //scx->reset_blocked();
-  //  scx->context()->xcpu_state_change(~0UL, Thread_ready);
-  //  //Ready_queue::rq.current().ready_enqueue(scx);
+    Mem::mp_mb();
+
+    for (int j = 0; j < size; j++)
+      while (tmp[j]->_pending_sc_rq) { Proc::pause(); }
+  }
+  //printf("continuing...\n");
+}
+
+PROTECTED
+void
+Sched_constraint::stop_everyone() {
+  //printf("stop_everyone\n");
+  auto guard { lock_guard(this) };
+
+  assert(test());
+
+  //printf("sending IPI to CPUs: ");
+  //for (unsigned int i = 0; i < Config::Max_num_cpus; i++) {
+  //  if (_affected_cpus.get(Cpu_number(i))) {
+  //    printf("%d, ", i);
+  //  }
   //}
-  printf("continuing...\n");
+  //printf("\n");
+  auto resched_func = [](Cpu_number){ return true; };
+  Cpu_call::cpu_call_many(_affected_cpus, resched_func, _async);
 }
 
 PUBLIC
@@ -371,7 +398,7 @@ void
 Sched_constraint::release()
 {
   set_run(true);
-  wake_up_all_blocked();
+  wake_up_everyone();
 }
 
 PUBLIC
@@ -460,7 +487,7 @@ Cond_sc::create(Ram_quota *q)
 
 PUBLIC
 Cond_sc::Cond_sc(Ram_quota *q)
-: Sched_constraint (q)
+: Sched_constraint (q, false)
 { set_run(true); }
 
 PUBLIC
@@ -504,15 +531,16 @@ Cond_sc::invoke(L4_obj_ref self, L4_fpage::Rights rights, Syscall_frame *f,
   f->tag(res);
 }
 
+// TODO: set this logic for other SC types as well
 PRIVATE
 L4_msg_tag
 Cond_sc::flip()
 {
   set_run(!can_run());
-  // TODO: initiate resched on other CPUs?
-  // TODO: a la: stop_all_running()?
   if (can_run())
-    wake_up_all_blocked();
+    wake_up_everyone();
+  else
+    stop_everyone();
   return commit_result(0);
 }
 
@@ -713,7 +741,7 @@ Budget_sc::period_expired()
   replenish();
   calc_and_schedule_next_repl(current_cpu());
 
-  wake_up_all_blocked();
+  wake_up_everyone();
 
   Context *curr { ::current() };
 
@@ -908,7 +936,7 @@ Timer_window_sc::flip_state()
   _timeout.reset();
   calc_and_schedule_next_timeout();
   if (can_run())
-    wake_up_all_blocked();
+    wake_up_everyone();
 }
 
 IMPLEMENT

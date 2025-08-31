@@ -49,6 +49,9 @@ public:
   int set_global_sc(L4::Cap<L4::Sched_constraint> sc)
     override;
 
+  int set_cpus_sc(L4::Cap<L4::Sched_constraint> sc,
+      l4_sched_cpu_set_t const &cpus) override;
+
   void set_prio(unsigned offs, unsigned limit)
   { _prio_offset = offs; _prio_limit = limit; }
 

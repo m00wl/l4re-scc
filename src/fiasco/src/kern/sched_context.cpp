@@ -50,6 +50,7 @@ public:
   typedef cxx::static_vector<Sched_constraint *, unsigned> Sc_list;
   Sc_list _list;
   //Sched_constraint *_blocked_by;
+  Mword _pending_sc_rq;
 };
 
 // --------------------------------------------------------------------------
@@ -70,8 +71,9 @@ PUBLIC
 Sched_context::Sched_context()
 : _prio(Config::Default_prio),
   //_lock(Spin_lock<>::Unlocked),
-  _list(&__scs[0], Config::Scx_max_sc)
+  _list(&__scs[0], Config::Scx_max_sc),
   //_blocked_by(nullptr)
+  _pending_sc_rq((Mword)false)
 {}
 
 PUBLIC
