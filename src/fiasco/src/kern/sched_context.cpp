@@ -174,14 +174,6 @@ Sched_context::is_constrained() const
 //  _blocked_by = nullptr;
 //}
 
-PUBLIC inline
-bool
-Sched_context::can_run()
-{
-  //return is_blocked() ? false : check_sc_list();
-  return check_sc_list();
-}
-
 PRIVATE
 bool
 Sched_context::check_sc_list()
@@ -194,17 +186,40 @@ Sched_context::check_sc_list()
     if (sc->can_run())
       continue;
 
-    auto guard { lock_guard(sc) };
+    if (sc->_async)
+      sc->test_and_set();
+    else {
+      panic("Sync SCs are difficult. Do you know what you are doing?");
+      while(!(sc->try_lock_arch()))
+      {
+        Proc::preemption_point();
+        return false;
+        //Proc::pause();
+      }
+    }
+
 
     if (sc->can_run())
+    {
+      sc->set(Cpu_lock::Locked);
       continue;
+    }
 
     sc->block(this);
+    sc->set(Cpu_lock::Locked);
 
     return false;
   }
 
   return true;
+}
+
+PUBLIC inline
+bool
+Sched_context::can_run()
+{
+  //return is_blocked() ? false : check_sc_list();
+  return check_sc_list();
 }
 
 PUBLIC
@@ -284,6 +299,7 @@ Sched_context::attach(Sched_constraint *sc)
 {
   assert(sc);
 
+  //printf("[%p]: attach [%p]\n", this, sc);
   //auto lg { lock_guard(_lock) };
 
   assert(!contains(sc));

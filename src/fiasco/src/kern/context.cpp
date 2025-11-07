@@ -797,7 +797,7 @@ Context::schedule()
       assert (next_to_run);
 
       if (!(next_to_run->sched()->can_run()))
-        continue; // TOMO: or go to preemption point?
+        continue;
       else if (EXPECT_FALSE(!(next_to_run->state() & Thread_ready_mask)))
         rq->ready_dequeue(next_to_run->sched());
       else switch (schedule_switch_to_locked(next_to_run))

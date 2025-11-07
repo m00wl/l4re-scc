@@ -11,6 +11,35 @@ IMPLEMENTATION [arm]:
 
 IMPLEMENT_DEFAULT inline void Mem::prefetch_w(void *) {}
 
+PUBLIC static inline
+unsigned char
+Mem::atomic_xchg_u8(volatile unsigned char *addr, unsigned char newval)
+{
+    /* use 32-bit reg for the load/store operations and narrow when returning */
+    unsigned int old32;
+    unsigned int tmp;
+
+    asm volatile(
+        "1:\n"
+        "  ldaxrb %w0, [%2]\n"       /* old32 = *addr (zero-extended) */
+        "  stlxrb %w1, %w3, [%2]\n"  /* tmp = store_exclusive_byte(newval, addr) */
+        "  cbnz   %w1, 1b\n"
+        : "=&r" (old32), "=&r" (tmp)
+        : "r" (addr), "r" ((unsigned int)newval)
+        : "memory"
+    );
+
+    return (Unsigned8)old32;
+}
+
+PUBLIC static inline
+bool
+Mem::atomic_xchg_bool(volatile bool *addr, bool newval)
+{
+    unsigned char old = atomic_xchg_u8((volatile unsigned char *)addr, newval ? 1u : 0u);
+    return old != 0;
+}
+
 //-----------------------------------------------------------------------------
 IMPLEMENTATION [arm && 32bit]:
 

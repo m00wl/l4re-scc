@@ -70,7 +70,10 @@ private:
   typedef cxx::Sd_list<Sched_context> Blocked_list;
   Blocked_list _list;
   bool _dying;
+public:
   bool _async;
+private:
+  // TODO: sanity checks, e.g. prevent migration to a non-affected CPU?
   Cpu_mask _affected_cpus;
 };
 
@@ -262,7 +265,7 @@ Sched_constraint::Sched_constraint(Ram_quota *q, bool async = true)
   _async(async),
   _affected_cpus()
 {
-  //printf("SC[%p]: created\n", this);
+  //printf("[%p]: created\n", this);
 }
 
 PUBLIC
@@ -335,8 +338,8 @@ PROTECTED
 void
 Sched_constraint::wake_up_everyone()
 {
-  //printf("wake_up_everyone\n");
-  auto guard { lock_guard(this) };
+  //printf("wake_up_everyone start\n");
+  //auto guard { lock_guard(this) };
 
   assert(test());
 
@@ -371,14 +374,13 @@ Sched_constraint::wake_up_everyone()
     for (int j = 0; j < size; j++)
       while (tmp[j]->_pending_sc_rq) { Proc::pause(); }
   }
-  //printf("continuing...\n");
+  //printf("wake_up_everyone done\n");
 }
 
 PROTECTED
 void
 Sched_constraint::stop_everyone() {
-  //printf("stop_everyone\n");
-  auto guard { lock_guard(this) };
+  //printf("[%p]: stop_everyone start\n", this);
 
   assert(test());
 
@@ -389,14 +391,41 @@ Sched_constraint::stop_everyone() {
   //  }
   //}
   //printf("\n");
-  auto resched_func = [](Cpu_number){ return true; };
-  Cpu_call::cpu_call_many(_affected_cpus, resched_func, _async);
+
+  for (Cpu_number n = Cpu_number::first(); n < Config::max_num_cpus(); ++n)
+  {
+    if (!_affected_cpus.get(n))
+      continue;
+
+    if (n == current_cpu())
+      continue;
+
+    Cpu_call_queue &q = Cpu_call::_glbl_q.cpu(n);
+    Mem::atomic_xchg_bool(&q.pending_sc_resched_rq, true);
+    Ipi::send(Ipi::Global_request, current_cpu(), n);
+  }
+
+  if (_async)
+    return;
+
+  for (Cpu_number n = Cpu_number::first(); n < Config::max_num_cpus(); ++n)
+  {
+    if (!_affected_cpus.get(n))
+      continue;
+
+    Cpu_call_queue &q = Cpu_call::_glbl_q.cpu(n);
+    while (q.pending_sc_resched_rq)
+      Proc::pause();
+  }
+
+  //printf("[%p]: stop_everyone done\n", this);
 }
 
 PUBLIC
 void
 Sched_constraint::release()
 {
+  auto guard { lock_guard(this) };
   set_run(true);
   wake_up_everyone();
 }
@@ -487,7 +516,7 @@ Cond_sc::create(Ram_quota *q)
 
 PUBLIC
 Cond_sc::Cond_sc(Ram_quota *q)
-: Sched_constraint (q, false)
+: Sched_constraint (q)
 { set_run(true); }
 
 PUBLIC
@@ -531,11 +560,12 @@ Cond_sc::invoke(L4_obj_ref self, L4_fpage::Rights rights, Syscall_frame *f,
   f->tag(res);
 }
 
-// TODO: set this logic for other SC types as well
 PRIVATE
 L4_msg_tag
 Cond_sc::flip()
 {
+  //printf("SC[%p]: flip\n", this);
+  auto guard { lock_guard(this) };
   set_run(!can_run());
   if (can_run())
     wake_up_everyone();
@@ -726,8 +756,10 @@ void
 Budget_sc::timeslice_expired()
 {
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> BSC[%p]: timeslice_expired\n", this);
- // printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>> BSC[%p]: deadline hit @ %llu\n", this, Timer::system_clock());
+  // printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>> BSC[%p]: deadline hit @ %llu\n", this, Timer::system_clock());
+  auto guard { lock_guard(this) };
   set_run(false);
+  stop_everyone();
   //Thread *t = ::current_thread();
   //static_cast<Thread_object *>(t)->ex_regs(~0UL, ~0UL, 0, 0, 0, Thread::Exr_trigger_sched_exception);
 }
@@ -738,6 +770,7 @@ Budget_sc::period_expired()
 {
   // TOMO: requeue here?
   if (M_SCHEDULER_DEBUG) printf("SCHEDULER> BSC[%p]: period_expired\n", this);
+  auto guard { lock_guard(this) };
   replenish();
   calc_and_schedule_next_repl(current_cpu());
 
@@ -932,11 +965,14 @@ PRIVATE
 void
 Timer_window_sc::flip_state()
 {
+  auto guard { lock_guard(this) };
   set_run(!can_run());
   _timeout.reset();
   calc_and_schedule_next_timeout();
   if (can_run())
     wake_up_everyone();
+  else
+    stop_everyone();
 }
 
 IMPLEMENT
@@ -1036,7 +1072,7 @@ bool
 Mbw_sc::Mbw_sc_timeout::expired()
 {
   _sc->set_run(true);
-  // force reschedule.
+  _sc->stop_everyone();
   return true;
 }
 

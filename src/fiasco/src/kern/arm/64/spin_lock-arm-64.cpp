@@ -58,3 +58,43 @@ Spin_lock<Lock_t>::unlock_arch()
     }
 #undef UNL
 }
+
+
+PUBLIC template<typename Lock_t> inline NEEDS["processor.h"]
+bool
+Spin_lock<Lock_t>::try_lock_arch()
+{
+  Lock_t dummy, tmp;
+
+#define TRY(z,u) \
+  __asm__ __volatile__ ( \
+      "   prfm   pstl1keep, [%[lock]]                 \n" \
+      "   ldaxr" #z "  %" #u "[d], [%[lock]]          \n" \
+      "   tst     %x[d], #2                           \n" /* Arch_lock == #2 */ \
+      "   bne 1f                                      \n" \
+      "   orr   %x[tmp], %x[d], #2                    \n" \
+      "   stxr" #z " %w[d], %" #u "[tmp], [%[lock]]   \n" \
+      "   cbnz  %w[d], 1f                             \n" \
+      "   mov   %w[d], #1                             \n" \
+      "   b     2f                                     \n" \
+      "1: mov   %w[d], #0                             \n" \
+      "2:                                            \n" \
+      : [d] "=&r" (dummy), [tmp] "=&r" (tmp), "+m" (_lock) \
+      : [lock] "r" (&_lock) \
+      : "cc" \
+      )
+
+  extern char __use_of_invalid_type_for_Spin_lock__sizeof_is_invalid;
+  switch (sizeof(Lock_t))
+    {
+    case 1: TRY(b,w); break;
+    case 2: TRY(h,w); break;
+    case 4: TRY(,w); break;
+    case 8: TRY(,x); break;
+    default: __use_of_invalid_type_for_Spin_lock__sizeof_is_invalid = 12; break;
+    }
+#undef TRY
+
+  /* 'dummy' now contains 1 on success, 0 on failure */
+  return (bool) dummy;
+}

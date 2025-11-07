@@ -108,6 +108,7 @@ public:
   bool dequeue(Cpu_call *drq);
   bool handle_requests();
   bool execute_request(Cpu_call *r);
+  bool pending_sc_resched_rq = false;
 };
 
 
@@ -148,7 +149,8 @@ IMPLEMENT inline NEEDS["mem.h", "lock_guard.h", "globals.h"]
 bool
 Cpu_call_queue::handle_requests()
 {
-  bool need_resched = false;
+  //bool need_resched = false;
+  bool need_resched = Mem::atomic_xchg_bool(&pending_sc_resched_rq, false);
   while (1)
     {
       Queue_item *qi;
@@ -156,7 +158,8 @@ Cpu_call_queue::handle_requests()
           auto guard = lock_guard(q_lock());
           qi = first();
           if (!qi)
-            return need_resched;
+            break;
+            //return need_resched;
 
           check (Queue::dequeue(qi));
         }
@@ -164,6 +167,8 @@ Cpu_call_queue::handle_requests()
       Cpu_call *r = static_cast<Cpu_call*>(qi);
       need_resched |= execute_request(r);
     }
+
+  return need_resched;
 }
 
 // ----------------------------------------------------------------------
@@ -191,6 +196,7 @@ IMPLEMENTATION [mp]:
 
 EXTENSION class Cpu_call
 {
+  public:
   static Per_cpu<Cpu_call_queue> _glbl_q;
 };
 
@@ -283,5 +289,4 @@ Cpu_call::handle_global_requests()
 {
   return _glbl_q.current().handle_requests();
 }
-
 
