@@ -189,9 +189,9 @@ Sched_context::check_sc_list()
     if (sc->_async)
       sc->test_and_set();
     else {
-      panic("Sync SCs are difficult. Do you know what you are doing?");
       while(!(sc->try_lock_arch()))
       {
+        panic("Deadlock prevention. Do you know what you are doing?");
         Proc::preemption_point();
         return false;
         //Proc::pause();

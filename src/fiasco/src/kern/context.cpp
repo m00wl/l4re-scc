@@ -1074,6 +1074,12 @@ Context::schedule_switch_to_locked(Context *t)
   if (rq.current() != t->sched())
     rq.set_current(t->sched());
 
+  //if (t->sched()->_pending_sc_rq)
+  //{
+  //  Mem::mp_mb();
+  //  write_now(&(t->sched()->_pending_sc_rq), (Mword)false);
+  //}
+
   if (EXPECT_FALSE(t == this))
   {
     if (M_SCHEDULER_DEBUG) printf("SCHEDULER> we continue to run C[%p]\n", this);
