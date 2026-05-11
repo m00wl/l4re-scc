@@ -37,6 +37,7 @@
             # run
             pkgs.qemu
             pkgs.minicom
+            pkgs.dnsmasq
           ];
           shellHook = ''
             export L4RE_SCC_ROOT=$(git rev-parse --show-toplevel)

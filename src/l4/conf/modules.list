@@ -54,41 +54,57 @@ modaddr 0x01100000
 default-kernel fiasco -serial_esc
 default-bootstrap bootstrap
 
-entry demo
+#entry demo
+#kernel fiasco -serial_esc
+#roottask moe rom/demo.cfg
+#module l4re
+#module ned
+#module demo.cfg
+#module video-pipeline
+#module video.yuv
+#module pointer-chasing
+
+#entry calc-pi
+#roottask moe --init=rom/calc-pi
+#module l4re
+#module calc-pi
+
+entry sc-twindow
 kernel fiasco -serial_esc
-roottask moe rom/demo.cfg
+roottask moe rom/hello-sc.cfg
 module l4re
 module ned
-module demo.cfg
-module video-pipeline
-module video.yuv
-module pointer-chasing
+module hello-sc.cfg
+module hello
 
-entry calc-pi
-roottask moe --init=rom/calc-pi
-module l4re
-module calc-pi
+#entry sc-test
+#kernel fiasco -serial_esc
+#roottask moe rom/sc-test.cfg
+#module l4re
+#module ned
+#module sc-test.cfg
+#module sc-test
 
 entry sc-mutex
 roottask moe --init=rom/sc-mutex
 module l4re
 module sc-mutex
 
-entry ex_shmc
-kernel fiasco -serial_esc
-roottask moe rom/ex_shmc.cfg
-module l4re
-module ned
-module ex_shmc.cfg
-module ex_shmc
+#entry ex_shmc
+#kernel fiasco -serial_esc
+#roottask moe rom/ex_shmc.cfg
+#module l4re
+#module ned
+#module ex_shmc.cfg
+#module ex_shmc
 
-entry ex_omp
-kernel fiasco -serial_esc
-roottask moe rom/ex_omp.cfg
-module l4re
-module ned
-module ex_omp.cfg
-module ex_omp
+#entry ex_omp
+#kernel fiasco -serial_esc
+#roottask moe rom/ex_omp.cfg
+#module l4re
+#module ned
+#module ex_omp.cfg
+#module ex_omp
 
 entry hello
 roottask moe --init=rom/hello
@@ -102,22 +118,6 @@ module l4re
 module ned
 module hello.cfg
 module hello
-
-entry hello-sc-cfg
-kernel fiasco -serial_esc
-roottask moe rom/hello-sc.cfg
-module l4re
-module ned
-module hello-sc.cfg
-module hello
-
-entry sc-test
-kernel fiasco -serial_esc
-roottask moe rom/sc-test.cfg
-module l4re
-module ned
-module sc-test.cfg
-module sc-test
 
 entry hello-2
 kernel fiasco -serial_esc
@@ -158,7 +158,7 @@ module fb-drv
 module mag
 module ex_fb_spectrum_cc
 
-entry[arch=x86|amd64|arm|arm64] L4Linux-basic
+entry[arch=x86|amd64|arm] L4Linux-basic
 roottask moe rom/l4lx.cfg
 module l4lx.cfg
 module l4re

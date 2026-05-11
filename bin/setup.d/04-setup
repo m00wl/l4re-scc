@@ -110,7 +110,7 @@ do_config()
     #CONF_DO_MIPS64R6=1
 
     CROSS_COMPILE_ARM=arm-linux-gnueabihf-
-    CROSS_COMPILE_ARM64=aarch64-linux-gnu-
+    CROSS_COMPILE_ARM64=aarch64-unknown-linux-gnu-
     CROSS_COMPILE_MIPS32R2=mips-linux-
     CROSS_COMPILE_MIPS32R6=mips-linux-
     CROSS_COMPILE_MIPS64R2=mips-linux-
@@ -137,7 +137,7 @@ do_config()
 	 x86-32    "ia32"                                      off \
 	 amd64     "amd64/x86_64 "                             off \
 	 arm       "ARM (platform selection follows)"          off \
-	 arm64     "ARM64 / AARCH64"                           off \
+	 arm64     "ARM64 / AARCH64"                           on  \
 	 mips      "MIPS"                                      off \
 	 2> $tmpfile
 
@@ -278,7 +278,7 @@ do_config()
 
     if [ -n "$CONF_DO_ARM64" ]; then
       dialog --no-mouse --visit-items \
-	--inputbox "AARCH64 cross compiler prefix (CROSS_COMPILE)" 8 70 "aarch64-linux-gnu-" \
+	--inputbox "AARCH64 cross compiler prefix (CROSS_COMPILE)" 8 70 "aarch64-unknown-linux-gnu-" \
 	2> $tmpfile
       CROSS_COMPILE_ARM64=$(cat $tmpfile)
     fi
@@ -705,7 +705,7 @@ do_setup()
   fi
 
   if [ "$CONF_DO_ARM64" ]; then
-    make -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM64 DROPSCONF_DEFCONFIG=mk/defconfig/config.arm64-rv-v8a B=../../obj/l4/arm64
+    make -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM64 DROPSCONF_DEFCONFIG=mk/defconfig/config.arm64-virt-v8a B=../../obj/l4/arm64
   fi
 
   if [ "$CONF_DO_MIPS32R2" ]; then
@@ -923,7 +923,7 @@ EOF
     local Mboot=$odir/conf/Makeconf.boot
     mkdir -p $odir/conf
 
-    echo "MODULE_SEARCH_PATH+=\$(PATH_FIASCO):$(pwd)/obj/l4linux/arm64:$common_paths" >> $Mboot
+    echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm64-virt-el2:$(pwd)/obj/l4linux/arm64:$common_paths" >> $Mboot
 
     if [ "$CONF_DO_ARM64_VIRT_EL2" ]; then
       cat<<EOF >> $Mboot
