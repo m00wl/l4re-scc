@@ -50,6 +50,8 @@ public:
   void block(Sched_context *scx);
   void deblock(Sched_context *scx);
 
+  virtual void notify_attach(Context *t) = 0;
+  virtual void notify_detach(Context *t) = 0;
   virtual void deactivate() = 0;
   virtual void activate() = 0;
   virtual void migrate_away() = 0;
@@ -205,6 +207,37 @@ private:
   Unsigned64 _start;
   Unsigned64 _duration;
   Timer_window_sc_timeout _timeout;
+};
+
+class Mpam_mbw_sc : public Sched_constraint
+{
+public:
+  Unsigned64 get_threshold() const
+  { return _threshold; }
+
+  void set_threshold(Unsigned64 t)
+  { _threshold = t; }
+
+  void interrupt_handler();
+
+private:
+  Unsigned64 _threshold;
+};
+
+
+class Mpam_cache_sc : public Sched_constraint
+{
+public:
+  Unsigned64 get_limit() const
+  { return _limit; }
+
+  void set_limit(Unsigned64 l)
+  { _limit = l; }
+
+  void interrupt_handler();
+
+private:
+  Unsigned64 _limit;
 };
 
 // --------------------------------------------------------------------------
@@ -516,8 +549,22 @@ Cond_sc::create(Ram_quota *q)
 
 PUBLIC
 Cond_sc::Cond_sc(Ram_quota *q)
-: Sched_constraint (q)
+: Sched_constraint (q, false)
 { set_run(true); }
+
+PUBLIC
+void
+Cond_sc::notify_attach(Context *t) override
+{
+  (void)t;
+}
+
+PUBLIC
+void
+Cond_sc::notify_detach(Context *t) override
+{
+  (void)t;
+}
 
 PUBLIC
 void
@@ -611,6 +658,20 @@ Quant_sc::Timeslice_timeout::expired()
 {
   Ready_queue::rq.current().requeue(Ready_queue::rq.current().current());
   return true;
+}
+
+PUBLIC
+void
+Quant_sc::notify_attach(Context *t) override
+{
+  (void)t;
+}
+
+PUBLIC
+void
+Quant_sc::notify_detach(Context *t) override
+{
+  (void)t;
 }
 
 PUBLIC
@@ -790,6 +851,20 @@ Budget_sc::period_expired()
 
   //reschedule, if the replenished thread can preempt the current thread.
   return true;
+}
+
+PUBLIC
+void
+Budget_sc::notify_attach(Context *t) override
+{
+  (void)t;
+}
+
+PUBLIC
+void
+Budget_sc::notify_detach(Context *t) override
+{
+  (void)t;
 }
 
 PUBLIC
@@ -989,6 +1064,20 @@ Timer_window_sc::Timer_window_sc_timeout::expired()
 
 PUBLIC
 void
+Timer_window_sc::notify_attach(Context *t) override
+{
+  (void)t;
+}
+
+PUBLIC
+void
+Timer_window_sc::notify_detach(Context *t) override
+{
+  (void)t;
+}
+
+PUBLIC
+void
 Timer_window_sc::deactivate() override
 {}
 
@@ -1006,6 +1095,191 @@ PUBLIC
 void
 Timer_window_sc::migrate_to(Cpu_number) override
 {}
+
+static Kmem_slab_t<Mpam_mbw_sc> _mpam_mbw_sc_allocator("Mpam_mbw_sc");
+
+PRIVATE static
+Mpam_mbw_sc::Self_alloc *
+Mpam_mbw_sc::allocator()
+{ return _mpam_mbw_sc_allocator.slab(); }
+
+PUBLIC inline
+void
+Mpam_mbw_sc::operator delete (void *ptr)
+{
+  Mpam_mbw_sc *sc = reinterpret_cast<Mpam_mbw_sc *>(ptr);
+  allocator()->q_free<Ram_quota>(sc->get_quota(), sc);
+}
+
+PUBLIC static
+Mpam_mbw_sc *
+Mpam_mbw_sc::create(Ram_quota *q, Unsigned64 threshold)
+{
+  void *p = allocator()->q_alloc<Ram_quota>(q);
+  return p ? new (p) Mpam_mbw_sc(q, threshold) : 0;
+}
+
+PRIVATE
+Mpam_mbw_sc::Mpam_mbw_sc(Ram_quota *q, Unsigned64 threshold)
+: Sched_constraint(q, true),
+  _threshold(threshold)
+{
+  set_run(true);
+}
+
+PUBLIC
+void
+Mpam_mbw_sc::notify_attach(Context *t) override
+{
+  (void)t;
+  //Unsigned8 base = mpam_feature_page();
+  //Unsigned32 part_id = (Unsigned32)t->_part_id;
+  //Unsigned32 val = 0x7FFFFFFF - _threshold;
+
+  //// TODO: lock access to MSMON_CFG_MON_SEL
+  //*(volatile Unsigned32*)(base + 0x0800) = part_id; // MSMON_CFG_MON_SEL
+  //*(volatile Unsigned32*)(base + 0x0860) = val; // MSMON_MBWU
+  //*(volatile Unsigned32*)(base + 0x0828) = 0x82000000; // MSMON_CFG_MBWU_CTL (Bit 31: EN, Bit 25: OFLOW_INTR)
+}
+
+PUBLIC
+void
+Mpam_mbw_sc::notify_detach(Context *t) override
+{
+  (void)t;
+  //Unsigned8 base = mpam_feature_page();
+  //Unsigned32 part_id = (Unsigned32)t->_part_id;
+
+  //*(volatile Unsigned32*)(base + 0x0800) = part_id; // MSMON_CFG_MON_SEL
+  //*(volatile Unsigned32*)(base + 0x0828) = 0x00000000; // MSMON_CFG_MBWU_CTL (Clear EN and OFLOW_INTR)
+}
+
+PUBLIC
+void
+Mpam_mbw_sc::activate() override
+{
+}
+
+PUBLIC
+void
+Mpam_mbw_sc::deactivate() override
+{
+}
+
+PUBLIC
+void
+Mpam_mbw_sc::migrate_away() override
+{
+}
+
+PUBLIC
+void
+Mpam_mbw_sc::migrate_to(Cpu_number target) override
+{
+  (void)target;
+}
+
+IMPLEMENT
+void
+Mpam_mbw_sc::interrupt_handler()
+{
+  // TODO: MPAM Irq handling is hard to test without hardware :(
+  // provide this callback to call later
+  auto guard { lock_guard(this) };
+  set_run(false);
+  stop_everyone();
+}
+
+static Kmem_slab_t<Mpam_cache_sc> _mpam_cache_sc_allocator("Mpam_cache_sc");
+
+PRIVATE static
+Mpam_cache_sc::Self_alloc *
+Mpam_cache_sc::allocator()
+{ return _mpam_cache_sc_allocator.slab(); }
+
+PUBLIC inline
+void
+Mpam_cache_sc::operator delete (void *ptr)
+{
+  Mpam_cache_sc *sc = reinterpret_cast<Mpam_cache_sc *>(ptr);
+  allocator()->q_free<Ram_quota>(sc->get_quota(), sc);
+}
+
+PUBLIC static
+Mpam_cache_sc *
+Mpam_cache_sc::create(Ram_quota *q, Unsigned64 limit)
+{
+  void *p = allocator()->q_alloc<Ram_quota>(q);
+  return p ? new (p) Mpam_cache_sc(q, limit) : 0;
+}
+
+PRIVATE
+Mpam_cache_sc::Mpam_cache_sc(Ram_quota *q, Unsigned64 limit)
+: Sched_constraint(q, true),
+  _limit(limit)
+{
+  set_run(true);
+}
+
+PUBLIC
+void
+Mpam_cache_sc::notify_attach(Context *t) override
+{
+  (void)t;
+  //Unsigned8 base = mpam_feature_page();
+  //Unsigned32 part_id = (Unsigned32)t->_part_id;
+  //Unsigned32 val = 0x7FFFFFFF - _limit;
+
+  //*(volatile Unsigned32*)(base + 0x0800) = part_id; // MSMON_CFG_MON_SEL
+  //*(volatile Unsigned32*)(base + 0x0840) = val; // MSMON_CSU
+  //*(volatile Unsigned32*)(base + 0x0818) = 0x82000000; // MSMON_CFG_CSU_CTL
+}
+
+PUBLIC
+void
+Mpam_cache_sc::notify_detach(Context *t) override
+{
+  (void)t;
+  //Unsigned8 base = mpam_feature_page();
+  //Unsigned32 part_id = (Unsigned32)t->_part_id;
+
+  //*(volatile Unsigned32*)(base + 0x0800) = part_id; // MSMON_CFG_MON_SEL
+  //*(volatile Unsigned32*)(base + 0x0818) = 0x00000000; // MSMON_CFG_CSU_CTL (Clear EN and OFLOW_INTR)
+}
+
+PUBLIC
+void
+Mpam_cache_sc::activate() override
+{
+}
+
+PUBLIC
+void
+Mpam_cache_sc::deactivate() override
+{
+}
+
+PUBLIC
+void
+Mpam_cache_sc::migrate_away() override
+{
+}
+
+PUBLIC
+void
+Mpam_cache_sc::migrate_to(Cpu_number target) override
+{
+  (void)target;
+}
+
+IMPLEMENT
+void
+Mpam_cache_sc::interrupt_handler()
+{
+  auto guard { lock_guard(this) };
+  set_run(false);
+  stop_everyone();
+}
 
 // --------------------------------------------------------------------------
 IMPLEMENTATION [mbwp]:
@@ -1074,6 +1348,20 @@ Mbw_sc::Mbw_sc_timeout::expired()
   _sc->set_run(true);
   _sc->stop_everyone();
   return true;
+}
+
+PUBLIC
+void
+Mbw_sc::notify_attach(Context *t) override
+{
+  (void)t;
+}
+
+PUBLIC
+void
+Mbw_sc::notify_detach(Context *t) override
+{
+  (void)t;
 }
 
 PUBLIC

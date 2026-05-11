@@ -310,6 +310,7 @@ Sched_context::attach(Sched_constraint *sc)
       continue;
 
     i = sc;
+    //sc->notify_attach(context());
     sc->inc_ref();
     return true;
   }
@@ -337,6 +338,7 @@ Sched_context::detach(Sched_constraint *sc)
     auto guard { lock_guard(sc) };
 
     sc->deblock(this);
+    //sc->notify_detach(context());
     sc->dec_ref();
 
     if (sc->dying() && (sc->ref_cnt() == 0))

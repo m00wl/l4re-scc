@@ -42,6 +42,17 @@ IMPLEMENTATION [arm]:
 #include "thread_state.h"
 #include "utcb_support.h"
 
+inline void arm_switch_mpam(Context *t) {
+    Unsigned64 mpam_id = t->_mpam_id;
+    asm volatile(
+        "msr MPAM1_EL1, %0\n\t"
+        "isb"
+        :
+        : "r" (mpam_id)
+        : "memory"
+    );
+}
+
 IMPLEMENT inline NEEDS[Context::spill_user_state, Context::store_tpidrurw,
                        Context::load_tpidrurw, Context::load_tpidruro,
                        Context::arm_switch_gp_regs]
@@ -56,9 +67,8 @@ Context::switch_cpu(Context *t)
   t->fill_user_state();
   t->load_tpidrurw();
   t->load_tpidruro();
-  // TOMO: this call must be added to other architectures' switch_cpu() as well.
-  //switch_sched_context(t);
   arm_switch_gp_regs(t);
+  //arm_switch_mpam(t);
 }
 
 /** Thread context switchin.  Called on every re-activation of a

@@ -323,6 +323,11 @@ private:
   // The scheduling parameters.
   Sched_context _scx;
   Sched_context *_current_scx;
+public:
+  // Arm MPAM
+  Unsigned64 _part_id;
+  Unsigned64 _mpam_id; // consists of PART_ID for instr and data?
+private:
 
   // Pointer to floating point register state
   Fpu_state _fpu_state;
