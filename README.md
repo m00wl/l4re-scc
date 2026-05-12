@@ -1,6 +1,6 @@
 # Scheduling Constraints for L4Re
 
-This repository contains the artifact accompanying the RTAS 2026 paper [**Scheduling Constraints: A Universal OS Mechanism for Managing Shared Resources**](https://l4re.org).
+This repository contains the artifact accompanying the RTAS 2026 paper [**Scheduling Constraints: A Universal OS Mechanism for Managing Shared Resources**](https://l4re.org/research.html).
 
 ## Structure
 
@@ -64,7 +64,7 @@ make -C obj/l4/arm64/ qemu
 
 This will display a dialog menu to let you choose an entry to boot.
 For all entries, CPU time scheduling is done with scheduling constraints.
-Choose 'sc-twindow' or 'sc-mutex' to explore higher-level mechanisms realized with SCs.
+Choose `sc-twindow` or `sc-mutex` to explore higher-level mechanisms realized with SCs.
 
 ## L4Re Website
 
